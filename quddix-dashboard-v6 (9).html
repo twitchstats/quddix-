@@ -1,0 +1,2527 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>quddix — стрим и статистика</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#08080c; --panel:#141419; --panel2:#191920; --panel3:#1f1f28;
+    --purple:#9146FF; --purple-light:#b085ff; --live:#ff3b30; --cyan:#4fe0d6; --gold:#ffc94a; --pink:#ff6bb8; --green:#5fd97a;
+    --text:#f2f2f5; --dim:#8d8d99; --border:#252530;
+    --font-display:"Space Grotesk", sans-serif;
+    --font-mono:"JetBrains Mono", ui-monospace, monospace;
+    --font-body:"Inter", "Segoe UI", sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{ scroll-behavior:smooth; }
+  body{
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0px, rgba(255,255,255,.012) 1px, transparent 1px, transparent 3px),
+      radial-gradient(ellipse 900px 500px at 15% -5%, rgba(145,70,255,.16), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 10%, rgba(79,224,214,.08), transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
+    color:var(--text); font-family:var(--font-body);
+    min-height:100vh; padding-bottom:60px;
+  }
+  @media (prefers-reduced-motion: reduce){ *{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; } }
+  ::selection{ background:rgba(145,70,255,.35); }
+  .num{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 26px; background:rgba(23,23,29,.9); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--border); position:sticky; top:0; z-index:30; flex-wrap:wrap; gap:12px;
+  }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand-avatar{
+    width:42px; height:42px; border-radius:50%;
+    background:linear-gradient(135deg,var(--purple),#5c1fc9);
+    display:flex; align-items:center; justify-content:center; font-weight:800;
+    box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--purple);
+  }
+  .brand-title{ font-family:var(--font-display); font-size:19px; font-weight:700; letter-spacing:.2px; }
+  .brand-sub{ font-size:12px; color:var(--dim); }
+  #status-pill{
+    display:flex; align-items:center; gap:9px; padding:7px 14px; border-radius:999px;
+    font-weight:600; font-size:12.5px; border:1px solid var(--border); background:var(--panel2);
+    font-family:var(--font-mono); letter-spacing:.3px;
+  }
+  #status-pill.live{ background:rgba(255,59,48,.1); border-color:rgba(255,59,48,.45); color:#ff6b62; }
+  #status-pill .dot{ width:9px; height:9px; border-radius:50%; background:var(--dim); }
+  #status-pill.live .dot{ background:var(--live); box-shadow:0 0 8px var(--live); animation:pulse 1.4s infinite; }
+  @keyframes pulse{0%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.6}100%{transform:scale(1);opacity:1}}
+  .onair-bars{ display:none; align-items:flex-end; gap:2px; height:11px; }
+  #status-pill.live .onair-bars{ display:flex; }
+  .onair-bars span{ width:3px; background:var(--live); border-radius:1px; animation:onair 0.9s ease-in-out infinite; }
+  .onair-bars span:nth-child(1){ height:40%; animation-delay:0s; }
+  .onair-bars span:nth-child(2){ height:100%; animation-delay:.15s; }
+  .onair-bars span:nth-child(3){ height:65%; animation-delay:.3s; }
+  @keyframes onair{ 0%,100%{ transform:scaleY(.4); } 50%{ transform:scaleY(1); } }
+  .follow-btn{
+    background:var(--purple); color:#fff; text-decoration:none; font-weight:700; font-size:14px;
+    padding:9px 18px; border-radius:8px; transition:.2s; white-space:nowrap;
+  }
+  .follow-btn:hover{ background:var(--purple-light); transform:translateY(-1px); }
+
+  main{ max-width:1340px; margin:0 auto; padding:22px; }
+
+  .hero{ text-align:center; padding:20px 10px 26px; }
+  .hero h1{
+    font-family:var(--font-display);
+    font-size:clamp(21px,3.4vw,32px); font-weight:600; line-height:1.25;
+    background:linear-gradient(90deg,#fff,var(--purple-light) 70%,var(--cyan));
+    -webkit-background-clip:text; background-clip:text; color:transparent; margin-bottom:8px;
+  }
+  .hero p{ color:var(--dim); font-size:14px; max-width:620px; margin:0 auto; }
+
+  .stream-wrap{
+    display:grid; grid-template-columns:1fr 320px; gap:0;
+    background:var(--panel); border:1px solid var(--border); border-radius:16px; overflow:hidden;
+    box-shadow:0 20px 50px rgba(0,0,0,.45); margin-bottom:22px;
+    transition:box-shadow .4s, border-color .4s;
+  }
+  .stream-wrap.is-live{
+    border-color:rgba(255,59,48,.35);
+    box-shadow:0 20px 50px rgba(0,0,0,.45), 0 0 0 1px rgba(255,59,48,.15), 0 0 40px rgba(255,59,48,.12);
+  }
+  @media (max-width:860px){ .stream-wrap{ grid-template-columns:1fr; } .chat-col{ height:400px; } }
+  .player-col{ position:relative; background:#000; aspect-ratio:16/9; min-height:280px; }
+  .player-col iframe{ width:100%; height:100%; border:0; display:block; }
+  .offline-banner{
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:10px; background:linear-gradient(160deg,#1a1a24,#0e0e12); text-align:center; padding:20px;
+  }
+  .offline-banner.hidden{ display:none; }
+  .offline-banner .icon{ font-size:38px; opacity:.8; }
+  .offline-banner h3{ font-size:17px; font-weight:700; }
+  .offline-banner p{ color:var(--dim); font-size:13px; max-width:320px; }
+  .chat-col{ background:var(--panel2); display:flex; flex-direction:column; border-left:1px solid var(--border); }
+  .chat-col iframe{ width:100%; height:100%; border:0; flex:1; }
+  .chat-header{
+    padding:10px 14px; font-size:12.5px; font-weight:700; color:var(--dim);
+    border-bottom:1px solid var(--border); text-transform:uppercase; letter-spacing:.5px;
+  }
+
+  .section-title{
+    font-family:var(--font-display);
+    font-size:15.5px; font-weight:600; color:var(--purple-light);
+    margin:32px 0 12px; display:flex; align-items:center; gap:8px;
+    padding-bottom:8px; border-bottom:1px solid var(--border);
+  }
+  @keyframes fadeInUp{ from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:translateY(0); } }
+  .stat-card, .panel, .record-card, .ach-card{ animation:fadeInUp .5s ease both; }
+  .section-title .tag{
+    font-size:10.5px; font-weight:700; color:var(--dim); background:var(--panel3);
+    padding:3px 8px; border-radius:6px; text-transform:none; letter-spacing:0;
+  }
+
+  .stat-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; }
+  .stat-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px 18px;
+    position:relative; overflow:hidden; transition:border-color .2s, transform .2s;
+  }
+  .stat-card::before{
+    content:""; position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg,var(--purple),var(--cyan)); opacity:0; transition:opacity .2s;
+  }
+  .stat-card:hover{ border-color:#38384a; transform:translateY(-1px); }
+  .stat-card:hover::before{ opacity:1; }
+  .stat-card .label{ font-size:12px; color:var(--dim); margin-bottom:6px; }
+  .stat-card .value{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:24px; font-weight:700; }
+  .stat-card .value.small{ font-family:var(--font-body); font-size:16px; font-weight:600; }
+  .stat-card .sub{ font-size:12px; color:var(--dim); margin-top:4px; }
+  .stat-card .sub.up{ color:var(--green); }
+  .stat-card .sub.down{ color:var(--live); }
+  .stat-card .value.gold{ color:var(--gold); }
+
+  .two-col{ display:grid; grid-template-columns:1.3fr 1fr; gap:16px; margin-top:14px; }
+  @media (max-width:860px){ .two-col{ grid-template-columns:1fr; } }
+  .three-col{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-top:14px; }
+  @media (max-width:1020px){ .three-col{ grid-template-columns:1fr; } }
+
+  .panel{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px 20px; }
+  .panel h3{ font-family:var(--font-display); font-size:14.5px; font-weight:600; color:var(--purple-light); margin-bottom:12px; }
+  .panel .hint{ font-size:11.5px; color:var(--dim); margin-top:8px; line-height:1.5; }
+
+  svg.chart{ width:100%; height:180px; }
+  .chart-grid line{ stroke:var(--border); stroke-width:1; }
+  .chart-line{ fill:none; stroke:var(--purple-light); stroke-width:2.5; }
+  .chart-area{ fill:url(#areaGradient); opacity:.35; }
+
+  table.data-table{ width:100%; border-collapse:collapse; font-size:13px; }
+  table.data-table th{
+    text-align:left; color:var(--dim); font-weight:600; font-size:11px; text-transform:uppercase;
+    padding:6px 8px; border-bottom:1px solid var(--border); white-space:nowrap;
+  }
+  table.data-table td{ padding:8px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  table.data-table tr:last-child td{ border-bottom:none; }
+  .rank{ font-weight:800; color:var(--purple-light); width:24px; display:inline-block; }
+  .bar-bg{ background:var(--panel3); border-radius:6px; height:6px; overflow:hidden; margin-top:4px; min-width:60px; }
+  .bar-fill{ background:linear-gradient(90deg,var(--purple),var(--purple-light)); height:100%; }
+  .table-scroll{ overflow-x:auto; }
+
+  .hour-bars, .day-bars{ display:flex; align-items:flex-end; gap:4px; height:140px; }
+  .hour-bar, .day-bar{ flex:1; background:var(--panel3); border-radius:3px 3px 0 0; position:relative; min-height:2px; }
+  .hour-bar.best, .day-bar.best{ background:linear-gradient(180deg,var(--purple-light),var(--purple)); }
+  .hour-labels, .day-labels{ display:flex; gap:4px; margin-top:4px; }
+  .hour-labels span, .day-labels span{ flex:1; text-align:center; font-size:8.5px; color:var(--dim); }
+  .day-labels span{ font-size:11px; font-weight:600; }
+
+  .empty-note{ color:var(--dim); font-size:13px; padding:16px 0; text-align:center; }
+
+  .records-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
+  .record-card{
+    background:var(--panel2); border:1px solid var(--border); border-radius:12px; padding:14px 16px;
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .record-card .icon{ font-size:18px; }
+  .record-card .val{ font-size:19px; font-weight:800; }
+  .record-card .lbl{ font-size:11.5px; color:var(--dim); }
+
+  /* --- донат категорий --- */
+  .donut-wrap{ display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+  .donut-wrap svg{ flex-shrink:0; }
+  .donut-legend{ flex:1; min-width:160px; display:flex; flex-direction:column; gap:9px; }
+  .donut-legend .row{ display:flex; align-items:center; gap:9px; font-size:12.5px; }
+  .donut-legend .dot{ width:9px; height:9px; border-radius:3px; flex-shrink:0; }
+  .donut-legend .name{ flex:1; }
+  .donut-legend .pct{ font-family:var(--font-mono); color:var(--dim); }
+
+  /* --- рост подписчиков / зрителей по стримам --- */
+  .growth-legend{ display:flex; gap:16px; font-size:11.5px; color:var(--dim); margin-top:6px; }
+  .growth-legend span{ display:flex; align-items:center; gap:6px; }
+  .growth-legend i{ width:14px; height:2.5px; border-radius:2px; display:inline-block; }
+
+  /* --- сравнение недель --- */
+  .compare-row{ display:flex; align-items:center; justify-content:space-between; padding:11px 0; border-bottom:1px solid var(--border); }
+  .compare-row:last-child{ border-bottom:none; }
+  .compare-row .clabel{ font-size:13px; color:var(--dim); }
+  .compare-row .cvals{ display:flex; align-items:baseline; gap:8px; }
+  .compare-row .cnow{ font-family:var(--font-mono); font-size:16px; font-weight:700; }
+  .compare-row .cprev{ font-family:var(--font-mono); font-size:12px; color:var(--dim); }
+  .delta{ font-family:var(--font-mono); font-size:11.5px; font-weight:700; padding:2px 7px; border-radius:6px; }
+  .delta.up{ color:var(--green); background:rgba(95,217,122,.12); }
+  .delta.down{ color:var(--live); background:rgba(255,59,48,.12); }
+  .delta.flat{ color:var(--dim); background:var(--panel3); }
+
+  /* --- достижения --- */
+  .ach-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+  .ach-card{
+    background:var(--panel2); border:1px solid var(--border); border-radius:12px; padding:14px 16px;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .ach-top{ display:flex; align-items:center; gap:10px; }
+  .ach-icon{
+    width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center;
+    font-size:16px; background:var(--panel3); flex-shrink:0;
+  }
+  .ach-card.unlocked .ach-icon{ background:linear-gradient(135deg,var(--purple),var(--cyan)); }
+  .ach-name{ font-size:12.5px; font-weight:700; }
+  .ach-tier{ font-size:11px; color:var(--dim); }
+  .ach-bar-bg{ background:var(--panel3); border-radius:6px; height:5px; overflow:hidden; }
+  .ach-bar-fill{ background:linear-gradient(90deg,var(--purple),var(--cyan)); height:100%; }
+  .ach-progress-text{ font-family:var(--font-mono); font-size:10.5px; color:var(--dim); text-align:right; }
+
+  .recap-grid{ display:flex; flex-direction:column; gap:2px; }
+  .recap-row{ display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .recap-row:last-child{ border-bottom:none; }
+  .recap-row span{ color:var(--dim); }
+  .recap-row b{ font-family:var(--font-mono); font-weight:700; }
+
+  .trend{ font-family:var(--font-mono); font-size:12.5px; font-weight:700; margin-left:6px; }
+  .trend.up{ color:var(--green); }
+  .trend.down{ color:var(--live); }
+  .trend.flat{ color:var(--dim); }
+
+  .backup-btn.danger{ border-color:rgba(255,59,48,.45); color:#ff6b62; }
+  .backup-btn.danger:hover{ border-color:var(--live); color:var(--live); }
+
+  .backup-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; }
+  .backup-btn{
+    background:var(--panel3); border:1px solid var(--border); color:var(--text); font-size:12.5px; font-weight:700;
+    padding:8px 14px; border-radius:8px; cursor:pointer; transition:.2s;
+  }
+  .backup-btn:hover{ border-color:var(--purple-light); color:var(--purple-light); }
+  input#import-file{ display:none; }
+
+  footer{
+    text-align:center; color:var(--dim); font-size:12.5px; margin-top:36px; padding-top:18px;
+    border-top:1px solid var(--border);
+  }
+  footer a{ color:var(--purple-light); text-decoration:none; }
+  footer a:hover{ text-decoration:underline; }
+
+  /* --- переключатель акцентного цвета --- */
+  .theme-switch{ display:flex; align-items:center; gap:6px; }
+  .theme-dot{
+    width:17px; height:17px; border-radius:50%; cursor:pointer; border:2px solid transparent;
+    transition:.2s; padding:0;
+  }
+  .theme-dot:hover{ transform:scale(1.18); }
+  .theme-dot.active{ border-color:#fff; box-shadow:0 0 0 2px var(--bg); }
+
+  /* --- скролл-ревил для секций --- */
+  .reveal{ opacity:0; transform:translateY(14px); transition:opacity .6s ease, transform .6s ease; }
+  .reveal.in{ opacity:1; transform:translateY(0); }
+
+  /* --- поиск/фильтр в таблицах --- */
+  .table-tools{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; align-items:center; }
+  .search-input{
+    background:var(--panel3); border:1px solid var(--border); color:var(--text); font-size:12.5px;
+    padding:7px 12px; border-radius:8px; outline:none; flex:1; min-width:140px; font-family:var(--font-body);
+    transition:border-color .2s;
+  }
+  .search-input:focus{ border-color:var(--purple-light); }
+  .filter-chip{
+    background:var(--panel3); border:1px solid var(--border); color:var(--dim); font-size:11.5px; font-weight:600;
+    padding:6px 11px; border-radius:999px; cursor:pointer; transition:.2s; white-space:nowrap; user-select:none;
+  }
+  .filter-chip.active{ background:var(--purple); border-color:var(--purple); color:#fff; }
+  .filter-chip:hover{ color:var(--text); border-color:#38384a; }
+
+  /* --- форма / стрик / прогноз --- */
+  .streak-flame{ display:flex; align-items:baseline; gap:9px; }
+  .streak-flame .big{ font-family:var(--font-mono); font-size:32px; font-weight:800; color:var(--gold); }
+  .streak-flame .unit{ font-size:12.5px; color:var(--dim); }
+  .forecast-row{ display:flex; align-items:center; gap:12px; padding:9px 0; border-bottom:1px solid var(--border); }
+  .forecast-row:last-child{ border-bottom:none; }
+  .forecast-row .ico{ font-size:18px; width:26px; text-align:center; flex-shrink:0; }
+  .forecast-row .flabel{ font-size:11.5px; color:var(--dim); }
+  .forecast-row .fval{ font-family:var(--font-mono); font-size:13.5px; font-weight:700; }
+
+  /* --- зона зрителя --- */
+  .viewer-zone-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:16px; }
+  .vz-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px 20px;
+    display:flex; flex-direction:column; gap:10px; transition:border-color .2s;
+  }
+  .vz-card:hover{ border-color:#38384a; }
+  .vz-card h4{ font-family:var(--font-display); font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:8px; }
+  .vz-card .vz-desc{ font-size:11.5px; color:var(--dim); line-height:1.5; }
+  .vz-input-row{ display:flex; gap:8px; }
+  .vz-input{
+    flex:1; background:var(--panel3); border:1px solid var(--border); color:var(--text); font-family:var(--font-mono);
+    font-size:14px; padding:8px 10px; border-radius:8px; outline:none; min-width:0;
+  }
+  .vz-input:focus{ border-color:var(--purple-light); }
+  .vz-btn{
+    background:var(--purple); color:#fff; border:none; font-weight:700; font-size:12.5px; padding:9px 14px;
+    border-radius:8px; cursor:pointer; transition:.2s; white-space:nowrap;
+  }
+  .vz-btn:hover{ background:var(--purple-light); }
+  .vz-btn:disabled{ opacity:.45; cursor:not-allowed; }
+  .vz-result{ font-size:12px; color:var(--dim); min-height:18px; line-height:1.5; }
+  .vz-result b{ color:var(--text); }
+  .vz-stat-row{ display:flex; justify-content:space-between; font-size:11px; color:var(--dim); padding-top:8px; border-top:1px solid var(--border); margin-top:2px; }
+
+  .quiz-q{ font-size:12.5px; font-weight:600; line-height:1.4; min-height:34px; }
+  .quiz-opts{ display:flex; flex-direction:column; gap:6px; }
+  .quiz-opt{
+    background:var(--panel3); border:1px solid var(--border); color:var(--text); text-align:left; font-size:12px;
+    padding:8px 12px; border-radius:8px; cursor:pointer; transition:.2s;
+  }
+  .quiz-opt:hover{ border-color:var(--purple-light); }
+  .quiz-opt.correct{ border-color:var(--green); background:rgba(95,217,122,.14); }
+  .quiz-opt.wrong{ border-color:var(--live); background:rgba(255,59,48,.14); }
+  .quiz-opt:disabled{ cursor:default; }
+  .quiz-score{ font-family:var(--font-mono); font-size:11px; color:var(--dim); }
+
+  .ball-wrap{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:2px 0; }
+  .magic-ball{
+    width:68px; height:68px; border-radius:50%; cursor:pointer; border:none;
+    background:radial-gradient(circle at 32% 28%, #3a2b57, #0c0714 70%);
+    box-shadow:0 0 0 3px var(--border), 0 10px 24px rgba(0,0,0,.5);
+    display:flex; align-items:center; justify-content:center; font-size:20px; color:var(--cyan);
+    transition:transform .15s;
+  }
+  .magic-ball:active{ transform:scale(.92); }
+  .magic-ball.shaking{ animation:ballshake .4s; }
+  @keyframes ballshake{ 0%,100%{transform:translateX(0);} 20%{transform:translateX(-6px) rotate(-6deg);} 40%{transform:translateX(6px) rotate(6deg);} 60%{transform:translateX(-4px) rotate(-4deg);} 80%{transform:translateX(4px) rotate(4deg);} }
+  .ball-answer{ font-size:12.5px; text-align:center; min-height:34px; color:var(--purple-light); font-weight:600; }
+
+  .wheel-wrap{ display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .wheel-outer{ position:relative; width:136px; height:136px; }
+  .wheel-pointer{
+    position:absolute; top:-4px; left:50%; transform:translateX(-50%); width:0; height:0;
+    border-left:7px solid transparent; border-right:7px solid transparent; border-top:13px solid var(--gold); z-index:2;
+  }
+  .wheel-svg{ width:136px; height:136px; transition:transform 3.2s cubic-bezier(.17,.89,.32,1.15); }
+  .wheel-result{ font-size:12px; text-align:center; min-height:18px; }
+  .wheel-result b{ color:var(--gold); }
+
+  /* --- живая аура вокруг плеера + аватара, когда стрим идёт --- */
+  @keyframes liveAura{
+    0%,100%{ box-shadow:0 20px 50px rgba(0,0,0,.45), 0 0 0 1px rgba(255,59,48,.15), 0 0 40px rgba(255,59,48,.12); }
+    50%{ box-shadow:0 20px 50px rgba(0,0,0,.45), 0 0 0 1px rgba(255,59,48,.28), 0 0 66px rgba(255,59,48,.24); }
+  }
+  .stream-wrap.is-live{ animation:liveAura 3.4s ease-in-out infinite; }
+  .brand-avatar.live{ animation:avatarPulse 1.8s ease-in-out infinite; }
+  @keyframes avatarPulse{
+    0%,100%{ box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--live); }
+    50%{ box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--live), 0 0 16px rgba(255,59,48,.55); }
+  }
+
+  /* --- главная карточка среди статистики текущего стрима --- */
+  .stat-card.featured{
+    grid-column:span 2;
+    background:linear-gradient(160deg, var(--panel), var(--panel2));
+    border-color:rgba(145,70,255,.35);
+  }
+  .stat-card.featured .value{ font-size:38px; line-height:1.1; }
+  @media (max-width:520px){ .stat-card.featured{ grid-column:span 1; } .stat-card.featured .value{ font-size:28px; } }
+
+  .num-bump{ animation:numBump .5s ease; }
+  @keyframes numBump{ 0%{ transform:scale(1); } 35%{ transform:scale(1.07); color:var(--purple-light); } 100%{ transform:scale(1); } }
+
+  /* --- цветовая кодировка карточек рекордов по типу метрики --- */
+  .record-card{ border-left:3px solid var(--border); }
+  .record-card.c-purple{ border-left-color:var(--purple-light); }
+  .record-card.c-cyan{ border-left-color:var(--cyan); }
+  .record-card.c-pink{ border-left-color:var(--pink); }
+  .record-card.c-gold{ border-left-color:var(--gold); }
+  .record-card.c-green{ border-left-color:var(--green); }
+
+  /* =====================================================================
+     ВИЗУАЛЬНЫЙ АПГРЕЙД — глубина, свет, аккуратные акценты.
+     Ничего не ломает: только уточняет/усиливает то, что уже описано выше.
+     ===================================================================== */
+
+  /* тонкий кастомный скроллбар — вместо системного по умолчанию */
+  ::-webkit-scrollbar{ width:9px; height:9px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+  ::-webkit-scrollbar-thumb{ background:#2a2a36; border-radius:8px; border:2px solid var(--bg); }
+  ::-webkit-scrollbar-thumb:hover{ background:#3a3a4a; }
+  *{ scrollbar-width:thin; scrollbar-color:#2a2a36 transparent; }
+
+  body{
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0px, rgba(255,255,255,.012) 1px, transparent 1px, transparent 3px),
+      radial-gradient(ellipse 1000px 560px at 12% -8%, rgba(145,70,255,.20), transparent 62%),
+      radial-gradient(ellipse 760px 540px at 102% 6%, rgba(79,224,214,.11), transparent 58%),
+      radial-gradient(ellipse 620px 420px at 50% 115%, rgba(255,107,184,.06), transparent 60%),
+      var(--bg);
+  }
+
+  header{
+    box-shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -18px rgba(0,0,0,.6);
+  }
+  .brand-avatar{ transition:transform .3s ease, box-shadow .3s ease; }
+  .brand:hover .brand-avatar{ transform:rotate(-6deg) scale(1.05); }
+  .brand-title{ letter-spacing:.3px; }
+
+  .hero{ padding:28px 10px 30px; position:relative; }
+  .hero::before{
+    content:""; position:absolute; top:0; left:50%; transform:translateX(-50%);
+    width:180px; height:1px; background:linear-gradient(90deg,transparent,var(--border),transparent);
+  }
+  .hero h1{ letter-spacing:-.2px; }
+  .hero p{ line-height:1.6; }
+
+  .stream-wrap{ border-radius:18px; box-shadow:0 24px 60px -12px rgba(0,0,0,.55), 0 1px 0 rgba(255,255,255,.04) inset; }
+  .chat-header{ background:linear-gradient(180deg,rgba(255,255,255,.02),transparent); }
+
+  /* заголовки секций — градиентная подложка вместо плоской линии */
+  .section-title{
+    position:relative; border-bottom-color:transparent;
+  }
+  .section-title::after{
+    content:""; position:absolute; left:0; right:0; bottom:0; height:1px;
+    background:linear-gradient(90deg, var(--purple) 0%, var(--border) 35%, var(--border) 100%);
+    opacity:.6;
+  }
+
+  /* карточки статистики — больше глубины и мягкое свечение при наведении */
+  .stat-card, .panel, .vz-card, .ach-card, .record-card{
+    box-shadow:0 8px 22px -14px rgba(0,0,0,.55);
+  }
+  .stat-card{ border-radius:16px; }
+  .stat-card:hover{
+    transform:translateY(-2px);
+    box-shadow:0 14px 30px -14px rgba(145,70,255,.28), 0 8px 22px -14px rgba(0,0,0,.6);
+  }
+  .stat-card .value{ letter-spacing:-.2px; }
+  .stat-card::before{ height:2.5px; border-radius:16px 16px 0 0; }
+
+  .panel{
+    border-radius:16px;
+    background:linear-gradient(175deg, var(--panel), rgba(20,20,25,.7));
+    transition:border-color .25s, box-shadow .25s, transform .25s;
+  }
+  .panel:hover{ border-color:#2c2c38; }
+  .panel h3{ letter-spacing:.1px; }
+
+  .vz-card{ border-radius:16px; box-shadow:0 8px 22px -14px rgba(0,0,0,.5); }
+  .vz-card:hover{ transform:translateY(-2px); box-shadow:0 14px 28px -16px rgba(145,70,255,.22); }
+
+  .record-card, .ach-card{
+    border-radius:14px; transition:border-color .2s, transform .2s, box-shadow .2s;
+  }
+  .record-card:hover, .ach-card:hover{
+    transform:translateY(-2px); border-color:#34343f;
+    box-shadow:0 12px 24px -14px rgba(0,0,0,.6);
+  }
+
+  /* кнопки — единый мягкий hover-lift + тень в цвет акцента */
+  .follow-btn{ box-shadow:0 8px 20px -8px rgba(145,70,255,.55); }
+  .follow-btn:hover{ box-shadow:0 10px 24px -8px rgba(145,70,255,.7); }
+  .vz-btn{ box-shadow:0 6px 16px -6px rgba(145,70,255,.5); }
+  .vz-btn:hover{ transform:translateY(-1px); box-shadow:0 8px 18px -6px rgba(145,70,255,.6); }
+  .backup-btn{ transition:border-color .2s, color .2s, transform .2s; }
+  .backup-btn:hover{ transform:translateY(-1px); }
+  .filter-chip.active{ box-shadow:0 4px 12px -4px rgba(145,70,255,.6); }
+
+  /* таблицы — лёгкая зебра и подсветка строки под курсором */
+  table.data-table tr:hover td{ background:rgba(255,255,255,.02); }
+  .bar-bg{ box-shadow:inset 0 1px 2px rgba(0,0,0,.3); }
+
+  /* донат-графики / шар / колесо — чуть больше "объёма" */
+  .magic-ball{ box-shadow:0 0 0 3px var(--border), 0 14px 28px -8px rgba(0,0,0,.6), 0 0 24px -6px rgba(79,224,214,.25); }
+  .magic-ball:hover{ box-shadow:0 0 0 3px var(--purple-light), 0 14px 28px -8px rgba(0,0,0,.6), 0 0 30px -4px rgba(79,224,214,.4); }
+  .wheel-outer{ filter:drop-shadow(0 10px 20px rgba(0,0,0,.45)); }
+
+  #status-pill{ box-shadow:0 4px 14px -6px rgba(0,0,0,.5); }
+
+  footer{ position:relative; }
+  footer::before{
+    content:""; position:absolute; top:-1px; left:50%; transform:translateX(-50%);
+    width:220px; height:1px; background:linear-gradient(90deg,transparent,var(--purple-light),transparent); opacity:.5;
+  }
+
+  @media (max-width:600px){
+    main{ padding:14px; }
+    .hero{ padding:20px 6px 22px; }
+  }
+
+  /* =====================================================================
+     ВИЗУАЛЬНЫЙ АПГРЕЙД, ЧАСТЬ 2 — типографика, акценты, живость интерфейса.
+     ===================================================================== */
+
+  :focus-visible{ outline:2px solid var(--purple-light); outline-offset:2px; border-radius:4px; }
+
+  body{ letter-spacing:.1px; }
+  h1,h2,h3,h4{ text-wrap:balance; }
+
+  /* лёгкое проявление карточек по очереди — уже есть fadeInUp, тут просто задержка */
+  .stat-grid .stat-card:nth-child(1){ animation-delay:.02s; }
+  .stat-grid .stat-card:nth-child(2){ animation-delay:.06s; }
+  .stat-grid .stat-card:nth-child(3){ animation-delay:.10s; }
+  .stat-grid .stat-card:nth-child(4){ animation-delay:.14s; }
+  .stat-grid .stat-card:nth-child(5){ animation-delay:.18s; }
+  .stat-grid .stat-card:nth-child(6){ animation-delay:.22s; }
+
+  /* шапка — кнопка follow с лёгким бликом при наведении */
+  .follow-btn{ position:relative; overflow:hidden; }
+  .follow-btn::after{
+    content:""; position:absolute; inset:0; background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.25) 50%,transparent 70%);
+    transform:translateX(-120%); transition:transform .5s ease;
+  }
+  .follow-btn:hover::after{ transform:translateX(120%); }
+
+  /* герой — маленький бейдж-приветствие над заголовком */
+  .hero{ display:flex; flex-direction:column; align-items:center; }
+  .hero .eyebrow{
+    font-family:var(--font-mono); font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase;
+    color:var(--cyan); background:rgba(79,224,214,.1); border:1px solid rgba(79,224,214,.25);
+    padding:4px 12px; border-radius:999px; margin-bottom:12px;
+  }
+
+  /* иконки в шапках карточек — единый акцентный кружок */
+  .panel h3, .vz-card h4{ position:relative; }
+
+  /* достижения — разблокированные слегка светятся */
+  .ach-card.unlocked{ border-color:rgba(145,70,255,.3); background:linear-gradient(160deg, var(--panel2), rgba(145,70,255,.05)); }
+  .ach-card.unlocked .ach-name{ color:var(--purple-light); }
+  .ach-icon{ box-shadow:inset 0 1px 0 rgba(255,255,255,.06); }
+
+  /* карточки рекордов — иконка в приподнятом кружке */
+  .record-card{ background:linear-gradient(160deg, var(--panel2), rgba(255,255,255,.01)); }
+  .record-card .icon{ display:inline-flex; width:30px; height:30px; align-items:center; justify-content:center; background:var(--panel3); border-radius:9px; }
+
+  /* заголовки таблиц — чуть плотнее и с разрядкой */
+  table.data-table th{ letter-spacing:.6px; }
+
+  /* строки квиза — активная подсветка на фокусе клавиатуры тоже работает через :focus-visible выше */
+  .quiz-opt{ position:relative; }
+  .quiz-opt.correct::before{ content:"✓"; margin-right:6px; color:var(--green); font-weight:800; }
+  .quiz-opt.wrong::before{ content:"✕"; margin-right:6px; color:var(--live); font-weight:800; }
+
+  /* донат-легенда — точки покрупнее и с обводкой в цвет фона, аккуратнее на глаз */
+  .donut-legend .dot{ box-shadow:0 0 0 2px var(--bg); }
+
+  /* статус-пилюля в эфире — мягкое дыхание фона, не только точки */
+  #status-pill.live{ animation:pillGlow 2.6s ease-in-out infinite; }
+  @keyframes pillGlow{
+    0%,100%{ box-shadow:0 4px 14px -6px rgba(0,0,0,.5), 0 0 0 rgba(255,59,48,0); }
+    50%{ box-shadow:0 4px 14px -6px rgba(0,0,0,.5), 0 0 14px rgba(255,59,48,.25); }
+  }
+
+  /* тонкая верхняя полоса-акцент на панелях с графиками, как у stat-card */
+  .panel:has(svg.chart)::before,
+  .panel:has(.hour-bars)::before,
+  .panel:has(.day-bars)::before{
+    content:""; display:block; height:2px; margin:-18px -20px 16px;
+    background:linear-gradient(90deg,var(--purple),var(--cyan)); border-radius:16px 16px 0 0; opacity:.55;
+  }
+
+  /* инпуты — крупнее зона фокуса, приятнее клик */
+  .vz-input, .search-input{ transition:border-color .2s, box-shadow .2s; }
+  .vz-input:focus, .search-input:focus{ box-shadow:0 0 0 3px rgba(145,70,255,.15); }
+
+  /* =====================================================================
+     ВИЗУАЛЬНЫЙ АПГРЕЙД, ЧАСТЬ 3 — более заметные, "премиальные" акценты.
+     ===================================================================== */
+
+  /* киношная виньетка по краям экрана — едва заметная, добавляет глубины */
+  body::after{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:1;
+    background:radial-gradient(ellipse 90% 80% at 50% 40%, transparent 55%, rgba(0,0,0,.35) 100%);
+  }
+  header, main, footer{ position:relative; z-index:2; }
+  header{ z-index:30; }
+
+  /* быстрая навигация по разделам — липкая полоса под шапкой */
+  .quick-nav{
+    position:sticky; top:var(--header-h, 74px); z-index:25; display:flex; gap:8px; overflow-x:auto;
+    padding:10px 26px; background:rgba(20,20,26,.88); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--border); scrollbar-width:none;
+  }
+  .quick-nav::-webkit-scrollbar{ height:0; }
+  .quick-nav a{
+    display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font-size:12.5px; font-weight:600;
+    color:var(--dim); text-decoration:none; padding:6px 13px; border-radius:999px; border:1px solid transparent;
+    transition:.2s;
+  }
+  .quick-nav a:hover{ color:var(--text); border-color:var(--border); }
+  .quick-nav a.active{ color:#fff; }
+  .quick-nav a.c-purple.active{ background:rgba(145,70,255,.18); border-color:rgba(145,70,255,.5); }
+  .quick-nav a.c-cyan.active{ background:rgba(79,224,214,.16); border-color:rgba(79,224,214,.5); }
+  .quick-nav a.c-gold.active{ background:rgba(255,201,74,.16); border-color:rgba(255,201,74,.5); }
+  .quick-nav a.c-pink.active{ background:rgba(255,107,184,.16); border-color:rgba(255,107,184,.5); }
+  .quick-nav a.c-green.active{ background:rgba(95,217,122,.16); border-color:rgba(95,217,122,.5); }
+  @media (max-width:700px){ .quick-nav{ padding:8px 14px; } }
+
+  /* цветные иконки-бейджи и акцентная линия у заголовков секций */
+  .section-icon{
+    display:inline-flex; align-items:center; justify-content:center; width:27px; height:27px;
+    border-radius:8px; font-size:13px; margin-right:3px; flex-shrink:0;
+  }
+  .section-title.c-purple .section-icon{ background:rgba(145,70,255,.16); }
+  .section-title.c-cyan .section-icon{ background:rgba(79,224,214,.16); }
+  .section-title.c-gold .section-icon{ background:rgba(255,201,74,.16); }
+  .section-title.c-pink .section-icon{ background:rgba(255,107,184,.16); }
+  .section-title.c-green .section-icon{ background:rgba(95,217,122,.16); }
+  .section-title.c-purple::after{ background:linear-gradient(90deg,var(--purple),transparent 70%); }
+  .section-title.c-cyan::after{ background:linear-gradient(90deg,var(--cyan),transparent 70%); }
+  .section-title.c-gold::after{ background:linear-gradient(90deg,var(--gold),transparent 70%); }
+  .section-title.c-pink::after{ background:linear-gradient(90deg,var(--pink),transparent 70%); }
+  .section-title.c-green::after{ background:linear-gradient(90deg,var(--green),transparent 70%); }
+
+  /* живой градиент в заголовке — текст будто дышит светом */
+  .hero h1{
+    background-size:200% auto; animation:heroShine 7s linear infinite;
+  }
+  @keyframes heroShine{
+    0%{ background-position:0% 50%; }
+    50%{ background-position:100% 50%; }
+    100%{ background-position:0% 50%; }
+  }
+
+  /* градиентная рамка у ключевых блоков — плеер и "летающая" карточка статистики */
+  .stream-wrap{
+    border:1px solid transparent; background-clip:padding-box, border-box; background-origin:padding-box, border-box;
+    background-image:
+      linear-gradient(var(--panel),var(--panel)),
+      linear-gradient(135deg, rgba(145,70,255,.55), rgba(79,224,214,.35) 45%, rgba(37,37,48,.9) 75%);
+  }
+  .stream-wrap.is-live{
+    background-image:
+      linear-gradient(var(--panel),var(--panel)),
+      linear-gradient(135deg, rgba(255,59,48,.6), rgba(255,107,184,.35) 50%, rgba(145,70,255,.5));
+  }
+  .stat-card.featured{
+    border:1px solid transparent; background-clip:padding-box, border-box; background-origin:padding-box, border-box;
+    background-image:
+      linear-gradient(160deg, var(--panel), var(--panel2)),
+      linear-gradient(135deg, var(--purple), rgba(79,224,214,.5));
+  }
+
+  /* единая физика нажатия для всех кнопок — более "тактильный" отклик */
+  .vz-btn:active, .follow-btn:active, .backup-btn:active, .filter-chip:active, .magic-ball:active{
+    transform:scale(.96);
+  }
+
+  /* прокручиваемые таблицы — мягкое затухание по правому краю вместо жёсткого обреза */
+  .table-scroll{
+    mask-image:linear-gradient(90deg, #000 calc(100% - 24px), transparent 100%);
+    -webkit-mask-image:linear-gradient(90deg, #000 calc(100% - 24px), transparent 100%);
+  }
+
+  /* более выразительная иерархия текста в hero */
+  .hero p{ opacity:.85; }
+  .hero h1{ margin-bottom:10px; }
+
+  /* карточки чуть теснее прижаты друг к другу по вертикали — плотнее ритм страницы */
+  .section-title{ margin:38px 0 14px; }
+
+  /* аккуратный градиент на разделителе шапки при скролле (эффект стекла глубже) */
+  header{ background:linear-gradient(180deg, rgba(25,25,32,.92), rgba(20,20,26,.86)); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-avatar" id="brand-avatar">Q</div>
+    <div>
+      <div class="brand-title">quddix</div>
+      <div class="brand-sub">Стрим + вся статистика по каналу</div>
+    </div>
+  </div>
+  <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+    <div id="status-pill"><span class="dot"></span><span class="onair-bars"><span></span><span></span><span></span></span><span id="status-text">Проверяем статус…</span></div>
+    <div id="last-updated" style="font-size:11px; color:var(--dim);"></div>
+  </div>
+  <div class="theme-switch" id="theme-switch" title="Акцентный цвет">
+    <button class="theme-dot active" data-theme="purple" style="background:#9146FF;" aria-label="Фиолетовый акцент"></button>
+    <button class="theme-dot" data-theme="cyan" style="background:#4fe0d6;" aria-label="Бирюзовый акцент"></button>
+    <button class="theme-dot" data-theme="pink" style="background:#ff6bb8;" aria-label="Розовый акцент"></button>
+    <button class="theme-dot" data-theme="gold" style="background:#ffc94a;" aria-label="Золотой акцент"></button>
+  </div>
+  <a class="follow-btn" href="https://www.twitch.tv/quddix" target="_blank" rel="noopener">Открыть на Twitch</a>
+</header>
+
+<nav class="quick-nav" id="quick-nav">
+  <a href="#sec-stream" data-target="sec-stream" class="c-purple">📊 Стрим</a>
+  <a href="#sec-growth" data-target="sec-growth" class="c-cyan">📈 Рост</a>
+  <a href="#sec-history" data-target="sec-history" class="c-gold">🏆 Статистика</a>
+  <a href="#sec-achievements" data-target="sec-achievements" class="c-pink">🥇 Достижения</a>
+  <a href="#sec-viewerzone" data-target="sec-viewerzone" class="c-green">🎮 Зона зрителя</a>
+</nav>
+
+<main>
+  <div class="hero">
+    <span class="eyebrow">quddix dashboard</span>
+    <h1>Смотри, анализируй и отслеживай стримы quddix</h1>
+    <p>Плеер включается сам во время эфира. Ниже — статистика текущего стрима и накопленная история по всем стримам: рекорды, дни недели, лучшие часы, топ чатеров.</p>
+  </div>
+
+  <div class="stream-wrap">
+    <div class="player-col">
+      <iframe id="twitch-player" src="" allowfullscreen scrolling="no"></iframe>
+      <div id="offline-banner" class="offline-banner">
+        <div class="icon">💤</div>
+        <h3>quddix сейчас офлайн</h3>
+        <p>Статистика и статус проверяются автоматически. Плеер включится сам, как только начнётся стрим.</p>
+      </div>
+    </div>
+    <div class="chat-col">
+      <div class="chat-header">Чат трансляции</div>
+      <iframe id="twitch-chat" src=""></iframe>
+    </div>
+  </div>
+
+  <div class="section-title c-purple" id="sec-stream"><span class="section-icon">📊</span> Текущий стрим</div>
+  <div class="stat-grid">
+    <div class="stat-card featured">
+      <div class="label">Зрителей онлайн</div>
+      <div class="value" id="stat-viewers">—</div>
+      <div class="sub" id="stat-viewers-peak">пик этого стрима: —</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Название стрима</div>
+      <div class="value small" id="stat-title">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Категория</div>
+      <div class="value small" id="stat-game">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Стрим идёт</div>
+      <div class="value" id="stat-uptime">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Подписчиков на канале</div>
+      <div class="value" id="stat-followers">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Сообщений в минуту</div>
+      <div class="value" id="stat-msgrate">0</div>
+      <div class="sub" id="stat-msgtotal">всего за стрим: 0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Активность чата</div>
+      <div class="value" id="stat-engagement">—</div>
+      <div class="sub" id="stat-engagement-sub">сообщений на 100 зрителей</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Стабильность аудитории</div>
+      <div class="value" id="stat-retention">—</div>
+      <div class="sub" id="stat-retention-sub">ср. зрители / пик стрима</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <h3>📈 График зрителей (этот стрим)</h3>
+      <svg class="chart" viewBox="0 0 600 180" preserveAspectRatio="none" id="viewers-chart">
+        <defs>
+          <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#a970ff"/>
+            <stop offset="100%" stop-color="#a970ff" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <g class="chart-grid"></g>
+        <path class="chart-area" d=""></path>
+        <path class="chart-line" d=""></path>
+      </svg>
+      <div class="hint">Точка добавляется каждую минуту, пока страница открыта во время эфира.</div>
+    </div>
+
+    <div class="panel">
+      <h3>💬 Топ чата (этот стрим)</h3>
+      <div class="table-scroll">
+        <table class="data-table" id="top-chatters-table">
+          <thead><tr><th>#</th><th>Зритель</th><th>Сообщений</th></tr></thead>
+          <tbody id="top-chatters-body"><tr><td colspan="3" class="empty-note">Пока нет сообщений в чате</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title c-cyan" id="sec-growth"><span class="section-icon">📈</span> Рост канала</div>
+  <div class="two-col">
+    <div class="panel">
+      <h3>Подписчики во времени</h3>
+      <svg class="chart" viewBox="0 0 600 180" preserveAspectRatio="none" id="followers-chart">
+        <g class="chart-grid"></g>
+        <path class="chart-area" style="fill:url(#followersGradient); opacity:.3;" d=""></path>
+        <path class="chart-line" style="stroke:var(--cyan);" d=""></path>
+      </svg>
+      <svg width="0" height="0" style="position:absolute;">
+        <defs><linearGradient id="followersGradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#4fe0d6"/><stop offset="100%" stop-color="#4fe0d6" stop-opacity="0"/>
+        </linearGradient></defs>
+      </svg>
+      <div class="hint" id="followers-delta-hint">Снимок сохраняется примерно раз в день, пока страница открыта.</div>
+    </div>
+    <div class="panel">
+      <h3>Пик и средние зрители по стримам</h3>
+      <svg class="chart" viewBox="0 0 600 180" preserveAspectRatio="none" id="growth-chart">
+        <g class="chart-grid"></g>
+        <path class="chart-line" style="stroke:var(--purple-light);" id="growth-peak-line" d=""></path>
+        <path class="chart-line" style="stroke:var(--cyan);" id="growth-avg-line" d=""></path>
+      </svg>
+      <div class="growth-legend">
+        <span><i style="background:var(--purple-light);"></i>Пик зрителей</span>
+        <span><i style="background:var(--cyan);"></i>Средние зрители</span>
+      </div>
+      <div class="hint">Последние 20 завершённых стримов, в хронологическом порядке.</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <h3>🎮 Категории — распределение по времени</h3>
+      <div class="donut-wrap" id="category-donut-wrap">
+        <div class="empty-note">Данные появятся после первых завершённых стримов</div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>🗓️ Эта неделя vs прошлая</h3>
+      <div id="week-compare"></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <h3>🔥 Форма канала</h3>
+      <div class="streak-flame">
+        <span class="big" id="streak-value">0</span>
+        <span class="unit" id="streak-unit">недель подряд со стримами</span>
+      </div>
+      <div class="hint" id="streak-hint">Считается по неделям: сколько недель подряд (включая текущую) был хотя бы один стрим.</div>
+    </div>
+    <div class="panel">
+      <h3>🔮 Прогноз следующего стрима</h3>
+      <div id="forecast-block">
+        <div class="empty-note">Данные появятся после первых завершённых стримов</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title c-pink" id="sec-achievements"><span class="section-icon">🥇</span> Достижения</div>
+  <div class="panel">
+    <div class="ach-grid" id="achievements-grid"></div>
+  </div>
+
+  <div class="section-title c-green" id="sec-viewerzone"><span class="section-icon">🎮</span> Зона зрителя <span class="tag">поиграй, пока ждёшь стрим</span></div>
+  <div class="viewer-zone-grid">
+    <div class="vz-card">
+      <h4>🎯 Угадай пик зрителей</h4>
+      <div class="vz-desc" id="predict-desc">Поставь прогноз, каким будет пик зрителей в этом стриме. Как только стрим закончится — узнаешь точность.</div>
+      <div class="vz-input-row">
+        <input type="number" class="vz-input" id="predict-input" placeholder="напр. 120" min="0">
+        <button class="vz-btn" id="predict-btn">Поставить</button>
+      </div>
+      <div class="vz-result" id="predict-result"></div>
+      <div class="vz-stat-row"><span>Всего прогнозов: <b id="predict-total">0</b></span><span>Лучшая точность: <b id="predict-best">—</b></span></div>
+    </div>
+
+    <div class="vz-card">
+      <h4>🧠 Квиз о канале</h4>
+      <div class="vz-desc">Вопросы генерируются из реальной статистики канала — проверь, насколько хорошо ты его знаешь.</div>
+      <div class="quiz-q" id="quiz-question">Загрузка вопроса…</div>
+      <div class="quiz-opts" id="quiz-opts"></div>
+      <div class="vz-stat-row"><span class="quiz-score" id="quiz-score">Счёт: 0 / 0</span><span class="filter-chip" id="quiz-next">Следующий вопрос →</span></div>
+    </div>
+
+    <div class="vz-card">
+      <h4>🎱 Магический шар</h4>
+      <div class="vz-desc">Задай вопрос в чате и щёлкни по шару — пусть судьба ответит вместо quddix.</div>
+      <div class="ball-wrap">
+        <button class="magic-ball" id="magic-ball">🔮</button>
+        <div class="ball-answer" id="ball-answer">Нажми на шар…</div>
+      </div>
+    </div>
+
+    <div class="vz-card">
+      <h4>🎡 Колесо категорий</h4>
+      <div class="vz-desc">Крутит категории канала — пусть колесо решит, во что играть дальше.</div>
+      <div class="wheel-wrap">
+        <div class="wheel-outer">
+          <div class="wheel-pointer"></div>
+          <svg class="wheel-svg" id="wheel-svg" viewBox="0 0 136 136"></svg>
+        </div>
+        <button class="vz-btn" id="wheel-spin">Крутить</button>
+        <div class="wheel-result" id="wheel-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title c-gold" id="sec-history"><span class="section-icon">🏆</span> Статистика по всем стримам <span class="tag" id="streams-tracked-tag">0 стримов отслежено</span></div>
+
+  <div class="panel">
+    <h3>Рекорды канала</h3>
+    <div class="records-grid" id="records-grid">
+      <div class="record-card c-purple"><div class="icon">🔥</div><div class="val" id="rec-peak">—</div><div class="lbl">рекорд зрителей за раз</div></div>
+      <div class="record-card c-cyan"><div class="icon">⏱️</div><div class="val" id="rec-longest">—</div><div class="lbl">самый долгий стрим</div></div>
+      <div class="record-card c-pink"><div class="icon">💬</div><div class="val" id="rec-msgs">—</div><div class="lbl">сообщений за один стрим</div></div>
+      <div class="record-card c-gold"><div class="icon">🎮</div><div class="val" id="rec-category">—</div><div class="lbl">самая частая категория</div></div>
+      <div class="record-card c-green"><div class="icon">👑</div><div class="val" id="rec-topchatter">—</div><div class="lbl">топ чатер за всё время</div></div>
+      <div class="record-card c-cyan"><div class="icon">📅</div><div class="val" id="rec-totalwatch">—</div><div class="lbl">часов эфира отслежено</div></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <h3>📅 Дни недели — когда смотрят больше всего</h3>
+      <div class="day-bars" id="day-bars"></div>
+      <div class="day-labels" id="day-labels"></div>
+      <div class="hint">Средний пик зрителей по дню недели, накопленный по всем отслеженным стримам. Подсвеченный столбик — самый массовый день.</div>
+    </div>
+    <div class="panel">
+      <h3>🕒 Часы — когда заходит больше всего людей</h3>
+      <div class="hour-bars" id="hour-bars"></div>
+      <div class="hour-labels" id="hour-labels"></div>
+      <div class="hint">Средние зрители по часам (местное время), за всё время наблюдений.</div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px;">
+    <h3>🗂️ История стримов</h3>
+    <div class="table-tools">
+      <input type="text" class="search-input" id="log-search" placeholder="Поиск по названию категории или дате…">
+      <div id="log-category-chips" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table" id="stream-log-table">
+        <thead>
+          <tr><th>Дата</th><th>День</th><th>Длительность</th><th>Пик зрителей</th><th>Ср. зрители</th><th>Сообщений</th><th>Топ чатер</th><th>Категория</th></tr>
+        </thead>
+        <tbody id="stream-log-body"><tr><td colspan="8" class="empty-note">Стримы появятся здесь после первого завершённого эфира на этой странице</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="three-col" style="margin-top:16px;">
+    <div class="panel">
+      <h3>🌅 Топ чата за сегодня</h3>
+      <div class="table-scroll">
+        <table class="data-table" id="today-chatters-table">
+          <thead><tr><th>#</th><th>Зритель</th><th>Сообщений</th></tr></thead>
+          <tbody id="today-chatters-body"><tr><td colspan="3" class="empty-note">Пока нет данных за сегодня</td></tr></tbody>
+        </table>
+      </div>
+      <div class="hint">С полуночи (местное время), включая текущий стрим.</div>
+    </div>
+    <div class="panel">
+      <h3>🗓️ Топ чата за неделю</h3>
+      <div class="table-scroll">
+        <table class="data-table" id="weekly-chatters-table">
+          <thead><tr><th>#</th><th>Зритель</th><th>Сообщений за 7 дней</th></tr></thead>
+          <tbody id="weekly-chatters-body"><tr><td colspan="3" class="empty-note">Пока нет данных</td></tr></tbody>
+        </table>
+      </div>
+      <div class="hint">Считается по стримам за последние 7 дней (включая текущий, если он идёт сейчас).</div>
+    </div>
+    <div class="panel">
+      <h3>👑 Топ чатеров за всё время</h3>
+      <div class="table-scroll">
+        <table class="data-table" id="alltime-chatters-table">
+          <thead><tr><th>#</th><th>Зритель</th><th>Сообщений всего</th></tr></thead>
+          <tbody id="alltime-chatters-body"><tr><td colspan="3" class="empty-note">Пока нет данных</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="two-col" style="margin-top:16px;">
+    <div class="panel">
+      <h3>🕓 Последний завершённый стрим</h3>
+      <div id="last-stream-recap" class="recap-grid">
+        <div class="empty-note">Пока нет завершённых стримов</div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>🛠️ Ручное управление стримом</h3>
+      <p class="hint" style="margin-top:0;">
+        Статус определяется автоматически. Если внешний API Twitch надолго "падает",
+        трекер может не заметить конец эфира — тогда «Топ чата (этот стрим)» будет копить
+        сообщения бесконечно. Есть автоматический вотчдог (проверка раз в минуту), но на
+        всякий случай ниже — ручной предохранитель.
+      </p>
+      <div class="backup-row">
+        <button class="backup-btn danger" id="btn-force-end">⏹️ Завершить текущий стрим вручную</button>
+      </div>
+      <div class="hint" id="admin-current-state"></div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px;">
+    <h3>💾 Бэкап накопленной статистики</h3>
+    <p class="hint" style="margin-top:0;">Статистика хранится в облаке (Supabase) и синхронизируется между устройствами и браузерами. Локально дублируется как офлайн-кэш на случай пропажи сети. Бэкап всё равно стоит скачивать время от времени — это дополнительная страховка.</p>
+    <div class="backup-row">
+      <button class="backup-btn" id="btn-export">⬇️ Скачать бэкап (JSON)</button>
+      <button class="backup-btn" id="btn-import">⬆️ Загрузить бэкап</button>
+      <input type="file" id="import-file" accept="application/json">
+    </div>
+  </div>
+
+  <footer>
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(async function(){
+  const CHANNEL = "quddix";
+  const parentDomain = window.location.hostname || "localhost";
+
+  const KEY_HISTORY   = "quddix_viewer_history_v1";     // минутные точки текущего стрима (последние ~180 хранятся для графика)
+  const KEY_STREAMLOG = "quddix_stream_log_v2";          // завершённые стримы
+  const KEY_ALLTIME   = "quddix_alltime_chatters_v1";    // {name: count} за всё время
+  const KEY_CURRENT   = "quddix_current_stream_v1";      // незавершённый стрим (переживает перезагрузку страницы)
+  const KEY_FOLLOWERS = "quddix_followers_history_v1";   // {t, count}[] — примерно дневные снимки подписчиков
+
+  // ---- Supabase: облачное хранилище статистики (публичный anon-ключ, это нормально) ----
+  const SUPABASE_URL = "https://zbjozhswqmcdsxdxoprl.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_-VwUYZ7iAKTDgM7g8_boow_dfHhbaKk";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Локальные кэши-переменные — единственный источник правды для рендера внутри вкладки.
+  // Заполняются один раз из Supabase при старте, дальше обновляются в памяти и
+  // асинхронно "проталкиваются" в облако при каждом изменении.
+  let historyData = [];
+  let streamLogData = [];
+  let followersHistory = [];
+  let lastKnownFollowers = null;
+
+  // ---- DOM ----
+  const playerFrame = document.getElementById("twitch-player");
+  const chatFrame = document.getElementById("twitch-chat");
+  const offlineBanner = document.getElementById("offline-banner");
+  const statusPill = document.getElementById("status-pill");
+  const statusText = document.getElementById("status-text");
+
+  const elViewers = document.getElementById("stat-viewers");
+  const elViewersPeak = document.getElementById("stat-viewers-peak");
+  const elTitle = document.getElementById("stat-title");
+  const elGame = document.getElementById("stat-game");
+  const elUptime = document.getElementById("stat-uptime");
+  const elFollowers = document.getElementById("stat-followers");
+  const elMsgRate = document.getElementById("stat-msgrate");
+  const elMsgTotal = document.getElementById("stat-msgtotal");
+  const elEngagement = document.getElementById("stat-engagement");
+  const elRetention = document.getElementById("stat-retention");
+  const chatterBody = document.getElementById("top-chatters-body");
+  const streamsTag = document.getElementById("streams-tracked-tag");
+
+  // =====================================================================
+  // 0) ФИЧИ, НЕ ЗАВИСЯЩИЕ ОТ ОБЛАЧНЫХ ДАННЫХ: тема, скролл-анимации,
+  //    магический шар — включаем сразу, не дожидаясь Supabase.
+  // =====================================================================
+  function loadJSONEarly(key, fallback){
+    try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }catch(e){ return fallback; }
+  }
+  function saveJSONEarly(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+
+  const ACCENTS = {
+    purple: { purple:"#9146FF", purpleLight:"#b085ff" },
+    cyan:   { purple:"#1fb8ad", purpleLight:"#4fe0d6" },
+    pink:   { purple:"#d6368f", purpleLight:"#ff6bb8" },
+    gold:   { purple:"#c98a1a", purpleLight:"#ffc94a" }
+  };
+  function applyAccent(name){
+    const a = ACCENTS[name] || ACCENTS.purple;
+    document.documentElement.style.setProperty("--purple", a.purple);
+    document.documentElement.style.setProperty("--purple-light", a.purpleLight);
+    document.querySelectorAll(".theme-dot").forEach(d => d.classList.toggle("active", d.getAttribute("data-theme")===name));
+    saveJSONEarly("quddix_accent_v1", name);
+  }
+  document.querySelectorAll(".theme-dot").forEach(dot => {
+    dot.addEventListener("click", () => applyAccent(dot.getAttribute("data-theme")));
+  });
+  applyAccent(loadJSONEarly("quddix_accent_v1", "purple"));
+
+  function initScrollReveal(){
+    const targets = document.querySelectorAll(".panel, .stat-card, .record-card, .ach-card, .vz-card");
+    if(!("IntersectionObserver" in window)) return;
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if(entry.isIntersecting){ entry.target.classList.add("in"); io.unobserve(entry.target); }
+      });
+    }, { threshold:0.12, rootMargin:"0px 0px -40px 0px" });
+    targets.forEach(t => { t.classList.add("reveal"); io.observe(t); });
+  }
+  initScrollReveal();
+
+  // ---- Магический шар ----
+  const MAGIC_ANSWERS = [
+    "Да, точно да","Нет, даже не думай","Скорее да, чем нет","Спроси ещё раз попозже","Сомнительно, если честно",
+    "Определённо да!","Мой ответ — нет","Может быть, звёзды не уверены","100% да","Лучше на это не рассчитывать",
+    "Всё возможно","Точно нет","Да, но не сразу","Шансы неплохие","Туманно — попробуй спросить снова",
+    "Как скажет quddix","Спроси в чате — там точно знают"
+  ];
+  const magicBallBtn = document.getElementById("magic-ball");
+  if(magicBallBtn){
+    magicBallBtn.addEventListener("click", function(){
+      this.classList.remove("shaking"); void this.offsetWidth; this.classList.add("shaking");
+      const answerEl = document.getElementById("ball-answer");
+      answerEl.textContent = "…думаю…";
+      setTimeout(() => {
+        answerEl.textContent = MAGIC_ANSWERS[Math.floor(Math.random()*MAGIC_ANSWERS.length)];
+      }, 380);
+    });
+  }
+
+  // ---- Колесо категорий ----
+  function shuffleArr(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+  // Базовые сегменты колеса — всегда в наличии, независимо от истории стримов.
+  const WHEEL_BASE_CATEGORIES = ["CS2","Аукцион","Просмотр YouTube","Just Chatting","Игры с чатом"];
+  const WHEEL_MAX_SEGMENTS = 8;
+
+  function getWheelCategories(){
+    const log = (typeof streamLogData !== "undefined" && streamLogData) ? streamLogData : [];
+    const fromHistory = Array.from(new Set(log.map(s=>s.category).filter(c=>c && c!=="—")));
+    const merged = [];
+    [...WHEEL_BASE_CATEGORIES, ...fromHistory].forEach(c => {
+      if(!merged.some(x => x.toLowerCase() === c.toLowerCase())) merged.push(c);
+    });
+    return merged.slice(0, WHEEL_MAX_SEGMENTS);
+  }
+  function renderWheel(){
+    const svg = document.getElementById("wheel-svg");
+    if(!svg) return;
+    const cats = getWheelCategories();
+    const n = cats.length;
+    const R=68, CX=68, CY=68;
+    let html = "";
+    for(let i=0;i<n;i++){
+      const a0 = (i/n)*2*Math.PI - Math.PI/2;
+      const a1 = ((i+1)/n)*2*Math.PI - Math.PI/2;
+      const x0 = CX + R*Math.cos(a0), y0 = CY + R*Math.sin(a0);
+      const x1 = CX + R*Math.cos(a1), y1 = CY + R*Math.sin(a1);
+      const large = (a1-a0) > Math.PI ? 1 : 0;
+      const color = ["#9146FF","#4fe0d6","#ff6bb8","#ffc94a","#5fd97a","#b085ff","#5c8bff","#ff9d5c"][i % 8];
+      html += `<path d="M ${CX} ${CY} L ${x0.toFixed(2)} ${y0.toFixed(2)} A ${R} ${R} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)} Z" fill="${color}" stroke="#141419" stroke-width="1.5"/>`;
+      const midA = (a0+a1)/2;
+      const lx = CX + (R*0.6)*Math.cos(midA), ly = CY + (R*0.6)*Math.sin(midA);
+      const rawLabel = String(cats[i]);
+      const label = rawLabel.length > 9 ? rawLabel.slice(0,8)+"…" : rawLabel;
+      html += `<text x="${lx.toFixed(2)}" y="${ly.toFixed(2)}" font-size="7.5" fill="#fff" text-anchor="middle" dominant-baseline="middle" transform="rotate(${(midA*180/Math.PI)+90} ${lx.toFixed(2)} ${ly.toFixed(2)})">${escapeHtmlEarly(label)}</text>`;
+    }
+    svg.innerHTML = html;
+  }
+  function escapeHtmlEarly(str){
+    return String(str).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+  renderWheel();
+  let wheelSpinning = false, wheelTotalDeg = 0;
+  const wheelSpinBtn = document.getElementById("wheel-spin");
+  if(wheelSpinBtn){
+    wheelSpinBtn.addEventListener("click", () => {
+      if(wheelSpinning) return;
+      const svg = document.getElementById("wheel-svg");
+      const cats = getWheelCategories();
+      renderWheel();
+      const n = cats.length;
+      const idx = Math.floor(Math.random()*n);
+      const segDeg = 360/n;
+      const targetCenter = idx*segDeg + segDeg/2;
+      const spins = 4 + Math.floor(Math.random()*3);
+      wheelTotalDeg += spins*360 + (360 - targetCenter) - (wheelTotalDeg % 360);
+      wheelSpinning = true;
+      svg.style.transform = `rotate(${wheelTotalDeg}deg)`;
+      document.getElementById("wheel-result").innerHTML = "";
+      setTimeout(() => {
+        document.getElementById("wheel-result").innerHTML = `Выпало: <b>${escapeHtmlEarly(cats[idx])}</b>`;
+        wheelSpinning = false;
+      }, 3300);
+    });
+  }
+
+  // ---- Одноразовая анимация "рисования" линии графика при первом появлении данных ----
+  const chartAnimState = {};
+  function animateChartLine(path, key){
+    if(!path || chartAnimState[key]) return;
+    chartAnimState[key] = true;
+    try{
+      const len = path.getTotalLength();
+      if(!len) return;
+      path.style.transition = "none";
+      path.style.strokeDasharray = len;
+      path.style.strokeDashoffset = len;
+      path.getBoundingClientRect();
+      path.style.transition = "stroke-dashoffset 1.1s ease";
+      requestAnimationFrame(() => { path.style.strokeDashoffset = "0"; });
+      setTimeout(() => {
+        path.style.transition = "";
+        path.style.strokeDasharray = "";
+        path.style.strokeDashoffset = "";
+      }, 1250);
+    }catch(e){}
+  }
+
+  function buildPlayerSrc(){ return `https://player.twitch.tv/?channel=${CHANNEL}&parent=${parentDomain}&muted=false&autoplay=true`; }
+  function buildChatSrc(){ return `https://www.twitch.tv/embed/${CHANNEL}/chat?parent=${parentDomain}&darkpopout`; }
+  chatFrame.src = buildChatSrc();
+
+  // ---------- generic storage helpers ----------
+  function loadJSON(key, fallback){
+    try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }catch(e){ return fallback; }
+  }
+  function saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+
+  // ---------- Supabase KV: облако как источник правды + localStorage как офлайн-кэш ----------
+  async function kvGet(key, fallback){
+    try{
+      const { data, error } = await sb
+        .from("stats_kv")
+        .select("value")
+        .eq("channel", CHANNEL)
+        .eq("key", key)
+        .maybeSingle();
+      if(!error && data){ saveJSON(key, data.value); return data.value; }
+    }catch(e){ /* сеть недоступна — используем локальный кэш */ }
+    return loadJSON(key, fallback);
+  }
+  function kvSet(key, value){
+    saveJSON(key, value); // сразу сохраняем локально, чтобы не терять данные при сбое сети
+    sb.from("stats_kv")
+      .upsert({ channel: CHANNEL, key, value, updated_at: new Date().toISOString() }, { onConflict: "channel,key" })
+      .then(({ error }) => { if(error) console.warn("Supabase kvSet error:", error.message); })
+      .catch(() => {});
+  }
+
+  const DAY_LABELS = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+  function toMonIndex(jsDay){ return jsDay === 0 ? 6 : jsDay - 1; } // getDay(): 0=Вс -> сдвигаем на индекс 6
+
+  function formatDuration(min){
+    min = Math.round(min);
+    const h = Math.floor(min/60), m = min%60;
+    if(h <= 0) return m + " мин";
+    return h + " ч " + m + " мин";
+  }
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+  function bumpNumber(el){
+    if(!el) return;
+    el.classList.remove("num-bump");
+    void el.offsetWidth;
+    el.classList.add("num-bump");
+  }
+
+  // =====================================================================
+  // 1) СТАТУС ЭФИРА + БАЗОВЫЕ МЕТРИКИ ТЕКУЩЕГО СТРИМА
+  // =====================================================================
+  let currentlyLive = null;
+  let prevViewersNum = null;
+  let currentStream = null; // загрузится из Supabase в initCloudState(); {startTime, peakViewers, viewerSum, viewerSamples, messagesCount, chatters:{}, categories:{}, title}
+  let dirtyCurrent = false;
+
+  async function fetchText(url){
+    try{ const res = await fetch(url, { cache:"no-store" }); return (await res.text()).trim(); }catch(e){ return null; }
+  }
+
+  const streamWrapEl = document.querySelector(".stream-wrap");
+  const brandAvatarEl = document.getElementById("brand-avatar");
+  function setLiveUI(isLive){
+    if(isLive){
+      statusPill.classList.add("live");
+      statusText.textContent = "В ЭФИРЕ";
+      offlineBanner.classList.add("hidden");
+      if(streamWrapEl) streamWrapEl.classList.add("is-live");
+      if(brandAvatarEl) brandAvatarEl.classList.add("live");
+      if(playerFrame.src !== buildPlayerSrc()) playerFrame.src = buildPlayerSrc();
+    } else {
+      statusPill.classList.remove("live");
+      statusText.textContent = "Офлайн";
+      offlineBanner.classList.remove("hidden");
+      if(streamWrapEl) streamWrapEl.classList.remove("is-live");
+      if(brandAvatarEl) brandAvatarEl.classList.remove("live");
+      elUptime.textContent = "—";
+    }
+  }
+
+  function startStream(viewers, game, title){
+    currentStream = {
+      startTime: Date.now(),
+      lastSeenLive: Date.now(),
+      peakViewers: viewers,
+      viewerSum: viewers,
+      viewerSamples: 1,
+      messagesCount: 0,
+      chatters: {},
+      categories: {},
+      title: title || ""
+    };
+    if(game) currentStream.categories[game] = 1;
+    dirtyCurrent = true;
+    historyData = [];
+    kvSet(KEY_HISTORY, historyData); // новая история графика для нового стрима
+    renderChatStats(); // мгновенно очищаем "Топ чата (этот стрим)" от данных прошлого эфира
+    if(typeof renderPredictWidget === "function") renderPredictWidget();
+    if(typeof renderAdminState === "function") renderAdminState();
+  }
+
+  function updateStreamLive(viewers, game){
+    if(!currentStream) return;
+    currentStream.lastSeenLive = Date.now();
+    if(viewers > currentStream.peakViewers) currentStream.peakViewers = viewers;
+    currentStream.viewerSum += viewers;
+    currentStream.viewerSamples += 1;
+    if(game){ currentStream.categories[game] = (currentStream.categories[game]||0) + 1; }
+    dirtyCurrent = true;
+  }
+
+  // Стрим считается "зависшим" (реально закончился, но мы это не зафиксировали —
+  // например decapi.me долго не отвечал/отдавал ошибки), если давно не было ни
+  // одного подтверждения "в эфире", либо стрим идёт неправдоподобно долго.
+  // Это и есть фикс бага "Топ чата (этот стрим) никогда не обнуляется": раньше
+  // при затяжном сбое внешнего API endStream() мог просто никогда не вызваться,
+  // а чат-трекер (отдельный websocket) продолжал копить сообщения в currentStream
+  // бесконечно, через любое число реальных стримов подряд.
+  const STALE_NO_CONFIRM_MS = 20 * 60 * 1000;   // 20 минут без подтверждения "в эфире"
+  const MAX_STREAM_DURATION_MS = 20 * 60 * 60 * 1000; // страховка на случай марафона/залипшего облачного состояния
+  function isStreamStale(cs){
+    if(!cs) return false;
+    const ref = cs.lastSeenLive || cs.startTime;
+    return (Date.now() - ref > STALE_NO_CONFIRM_MS) || (Date.now() - cs.startTime > MAX_STREAM_DURATION_MS);
+  }
+
+  function buildStreamRecord(cs){
+    const durationMin = Math.max((Date.now() - cs.startTime) / 60000, 1);
+    const avgViewers = cs.viewerSamples ? Math.round(cs.viewerSum / cs.viewerSamples) : 0;
+    let topChatterName = "—", topChatterCount = 0;
+    Object.entries(cs.chatters).forEach(([n,c]) => { if(c > topChatterCount){ topChatterCount = c; topChatterName = n; } });
+    let topCategory = "—", topCategoryCount = 0;
+    Object.entries(cs.categories).forEach(([n,c]) => { if(c > topCategoryCount){ topCategoryCount = c; topCategory = n; } });
+    return {
+      dateStart: cs.startTime,
+      dateEnd: Date.now(),
+      durationMin: durationMin,
+      peakViewers: cs.peakViewers,
+      avgViewers: avgViewers,
+      messagesCount: cs.messagesCount,
+      topChatter: topChatterName,
+      topChatterCount: topChatterCount,
+      category: topCategory,
+      dayOfWeek: toMonIndex(new Date(cs.startTime).getDay()),
+      chattersBreakdown: cs.chatters
+    };
+  }
+
+  function endStream(){
+    if(!currentStream) return;
+    const record = buildStreamRecord(currentStream);
+    streamLogData.push(record);
+    while(streamLogData.length > 1000) streamLogData.shift();
+    kvSet(KEY_STREAMLOG, streamLogData);
+
+    currentStream = null;
+    kvSet(KEY_CURRENT, null);
+    renderAllTimeStats();
+    renderChatStats(); // мгновенно очищаем "Топ чата (этот стрим)", не дожидаясь нового сообщения
+    renderTodayChatters();
+    renderLastStreamRecap(record);
+    if(typeof resolvePendingPrediction === "function") resolvePendingPrediction(record);
+    if(typeof renderAdminState === "function") renderAdminState();
+  }
+
+  // Отдельный сторож: проверяется каждую минуту НЕЗАВИСИМО от decapi.me —
+  // так залипшее состояние снимается, даже если внешние запросы стабильно падают.
+  function streamWatchdog(){
+    if(currentStream && isStreamStale(currentStream)){
+      console.warn("quddix dashboard: обнаружен зависший currentStream — принудительно завершаю и сбрасываю.");
+      currentlyLive = false;
+      setLiveUI(false);
+      endStream();
+    }
+  }
+
+  function persistCurrentIfDirty(){
+    if(dirtyCurrent && currentStream){ kvSet(KEY_CURRENT, currentStream); dirtyCurrent = false; }
+  }
+
+  async function refreshCoreStats(){
+    const [viewersRaw, titleRaw, gameRaw, uptimeRaw, followersRaw] = await Promise.all([
+      fetchText(`https://decapi.me/twitch/viewercount/${CHANNEL}`),
+      fetchText(`https://decapi.me/twitch/title/${CHANNEL}`),
+      fetchText(`https://decapi.me/twitch/game/${CHANNEL}`),
+      fetchText(`https://decapi.me/twitch/uptime/${CHANNEL}`),
+      fetchText(`https://decapi.me/twitch/followcount/${CHANNEL}`)
+    ]);
+
+    // Если ни один запрос не прошёл (сетевой сбой/лимит), а не реальный офлайн — просто
+    // пропускаем этот цикл, ничего не сбрасываем и не завершаем текущий стрим по ошибке.
+    if(viewersRaw === null && titleRaw === null && gameRaw === null && uptimeRaw === null && followersRaw === null){
+      return;
+    }
+
+    const uptimeLower = (uptimeRaw || "").toLowerCase();
+    const uptimeSaysOffline = uptimeLower.includes("offline") || uptimeLower.includes("не в эфире") || uptimeLower.includes("не транслирует") || uptimeLower.includes("не запущен");
+    const viewersNum = (viewersRaw && /^\d+$/.test(viewersRaw) && !uptimeSaysOffline) ? parseInt(viewersRaw, 10) : null;
+    const isLive = viewersNum !== null;
+
+    if(isLive !== currentlyLive){
+      currentlyLive = isLive;
+      setLiveUI(isLive);
+      if(isLive && !currentStream){
+        startStream(viewersNum, gameRaw, titleRaw);
+      } else if(!isLive && currentStream){
+        endStream();
+      }
+    }
+
+    if(isLive){
+      let trendHtml = "";
+      if(prevViewersNum !== null && viewersNum !== prevViewersNum){
+        const diff = viewersNum - prevViewersNum;
+        trendHtml = `<span class="trend ${diff>0?"up":"down"}">${diff>0?"▲":"▼"} ${Math.abs(diff)}</span>`;
+        bumpNumber(elViewers);
+      }
+      elViewers.innerHTML = viewersNum.toLocaleString("ru-RU") + trendHtml;
+      prevViewersNum = viewersNum;
+      if(currentStream){
+        updateStreamLive(viewersNum, gameRaw);
+        elViewersPeak.textContent = "пик этого стрима: " + currentStream.peakViewers.toLocaleString("ru-RU");
+        const avgSoFar = currentStream.viewerSum / currentStream.viewerSamples;
+        elEngagement.textContent = viewersNum > 0 ? Math.round((currentStream.messagesCount / viewersNum) * 100).toLocaleString("ru-RU") : "—";
+        elRetention.textContent = currentStream.peakViewers > 0 ? Math.round((avgSoFar / currentStream.peakViewers) * 100) + "%" : "—";
+        if(typeof renderPredictWidget === "function") renderPredictWidget();
+      }
+      elTitle.textContent = titleRaw || "—";
+      elGame.textContent = gameRaw || "—";
+      elUptime.textContent = (uptimeRaw && !uptimeRaw.toLowerCase().includes("offline")) ? uptimeRaw : "—";
+      recordViewerPoint(viewersNum);
+    } else {
+      elViewers.textContent = "офлайн";
+      elEngagement.textContent = "—";
+      elRetention.textContent = "—";
+      prevViewersNum = null;
+    }
+
+    if(followersRaw && /^\d+$/.test(followersRaw)){
+      const followersNum = parseInt(followersRaw, 10);
+      if(lastKnownFollowers !== null && followersNum !== lastKnownFollowers) bumpNumber(elFollowers);
+      elFollowers.textContent = followersNum.toLocaleString("ru-RU");
+      lastKnownFollowers = followersNum;
+      recordFollowerSnapshot(followersNum);
+    }
+
+    persistCurrentIfDirty();
+    renderHourlyBreakdown();
+
+    const lastUpdatedEl = document.getElementById("last-updated");
+    if(lastUpdatedEl){
+      const now = new Date();
+      lastUpdatedEl.textContent = "обновлено в " + now.toLocaleTimeString("ru-RU", {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+    }
+  }
+
+  // =====================================================================
+  // 2) ГРАФИК ЗРИТЕЛЕЙ ТЕКУЩЕГО СТРИМА (минутные точки)
+  // =====================================================================
+  let lastRecordedMinute = null;
+  function recordViewerPoint(viewers){
+    const now = new Date();
+    const minuteKey = Math.floor(now.getTime() / 60000);
+    if(minuteKey === lastRecordedMinute) return;
+    lastRecordedMinute = minuteKey;
+
+    historyData.push({ t: now.getTime(), v: viewers, h: now.getHours() });
+    while(historyData.length > 2000) historyData.shift();
+    kvSet(KEY_HISTORY, historyData);
+    renderViewersChart(historyData);
+  }
+
+  function renderViewersChart(hist){
+    const svg = document.getElementById("viewers-chart");
+    const linePath = svg.querySelector(".chart-line");
+    const areaPath = svg.querySelector(".chart-area");
+    const grid = svg.querySelector(".chart-grid");
+    grid.innerHTML = "";
+
+    const points = hist.slice(-180);
+    if(points.length < 2){ linePath.setAttribute("d",""); areaPath.setAttribute("d",""); return; }
+
+    const W=600, H=180, PAD=10;
+    const maxV = Math.max(...points.map(p=>p.v), 1);
+    const stepX = (W-PAD*2) / (points.length-1);
+    const coords = points.map((p,i) => {
+      const x = PAD + i*stepX;
+      const y = H-PAD - (p.v/maxV)*(H-PAD*2);
+      return [x,y];
+    });
+    let d = "M " + coords.map(c=>c.join(" ")).join(" L ");
+    linePath.setAttribute("d", d);
+    areaPath.setAttribute("d", d + ` L ${coords[coords.length-1][0]} ${H-PAD} L ${coords[0][0]} ${H-PAD} Z`);
+    animateChartLine(linePath, "viewers");
+
+    for(let i=1;i<4;i++){
+      const y=(H/4)*i;
+      const line=document.createElementNS("http://www.w3.org/2000/svg","line");
+      line.setAttribute("x1",0); line.setAttribute("x2",W); line.setAttribute("y1",y); line.setAttribute("y2",y);
+      grid.appendChild(line);
+    }
+  }
+
+  // =====================================================================
+  // 2b) ПОДПИСЧИКИ — примерно дневные снимки для графика роста
+  // =====================================================================
+  function dayKey(ts){ return new Date(ts).toISOString().slice(0,10); }
+
+  function recordFollowerSnapshot(count){
+    const last = followersHistory[followersHistory.length - 1];
+    if(last && dayKey(last.t) === dayKey(Date.now())){
+      last.count = count; // обновляем сегодняшний снимок, не плодим дубликаты
+    } else {
+      followersHistory.push({ t: Date.now(), count });
+      while(followersHistory.length > 400) followersHistory.shift();
+    }
+    kvSet(KEY_FOLLOWERS, followersHistory);
+    renderFollowersChart();
+  }
+
+  function renderFollowersChart(){
+    const svg = document.getElementById("followers-chart");
+    const linePath = svg.querySelector(".chart-line");
+    const areaPath = svg.querySelector(".chart-area");
+    const grid = svg.querySelector(".chart-grid");
+    grid.innerHTML = "";
+    const hint = document.getElementById("followers-delta-hint");
+
+    const points = followersHistory.slice(-60);
+    if(points.length < 2){
+      linePath.setAttribute("d",""); areaPath.setAttribute("d","");
+      hint.textContent = "Снимок сохраняется примерно раз в день, пока страница открыта. Пока данных недостаточно для графика.";
+      return;
+    }
+    const W=600, H=180, PAD=10;
+    const vals = points.map(p=>p.count);
+    const minV = Math.min(...vals), maxV = Math.max(...vals, minV+1);
+    const stepX = (W-PAD*2) / (points.length-1);
+    const coords = points.map((p,i) => {
+      const x = PAD + i*stepX;
+      const y = H-PAD - ((p.count-minV)/(maxV-minV || 1))*(H-PAD*2);
+      return [x,y];
+    });
+    let d = "M " + coords.map(c=>c.join(" ")).join(" L ");
+    linePath.setAttribute("d", d);
+    areaPath.setAttribute("d", d + ` L ${coords[coords.length-1][0]} ${H-PAD} L ${coords[0][0]} ${H-PAD} Z`);
+    animateChartLine(linePath, "followers");
+    for(let i=1;i<4;i++){
+      const y=(H/4)*i;
+      const line=document.createElementNS("http://www.w3.org/2000/svg","line");
+      line.setAttribute("x1",0); line.setAttribute("x2",W); line.setAttribute("y1",y); line.setAttribute("y2",y);
+      grid.appendChild(line);
+    }
+
+    const weekAgo = Date.now() - 7*24*60*60*1000;
+    const base = points.find(p => p.t >= weekAgo) || points[0];
+    const delta = points[points.length-1].count - base.count;
+    if(delta === 0){ hint.textContent = "Без изменений за последние 7 дней."; }
+    else{ hint.textContent = (delta > 0 ? "+" : "") + delta.toLocaleString("ru-RU") + " подписчиков за последние ~7 дней."; }
+  }
+
+  // =====================================================================
+  // 3) ЧАСЫ — активность по часам (из всей истории точек текущего+прошлых стримов)
+  // =====================================================================
+  function renderHourlyBreakdown(){
+    const hist = historyData;
+    const barsWrap = document.getElementById("hour-bars");
+    const labelsWrap = document.getElementById("hour-labels");
+    barsWrap.innerHTML = ""; labelsWrap.innerHTML = "";
+
+    if(hist.length < 5){
+      barsWrap.innerHTML = '<div class="empty-note" style="flex:1;">Пока недостаточно данных</div>';
+      return;
+    }
+    const sums = new Array(24).fill(0), counts = new Array(24).fill(0);
+    hist.forEach(p => { const h = (typeof p.h==="number")?p.h:new Date(p.t).getHours(); sums[h]+=p.v; counts[h]+=1; });
+    const avgs = sums.map((s,i)=> counts[i]? s/counts[i]:0);
+    const maxAvg = Math.max(...avgs,1);
+    const bestHour = avgs.indexOf(maxAvg);
+
+    for(let h=0; h<24; h++){
+      const bar = document.createElement("div");
+      bar.className = "hour-bar" + (h===bestHour && avgs[h]>0 ? " best":"");
+      bar.style.height = Math.max((avgs[h]/maxAvg)*100, avgs[h]>0?4:1) + "%";
+      bar.title = `${h}:00 — в среднем ${Math.round(avgs[h])} зрителей`;
+      barsWrap.appendChild(bar);
+      const label = document.createElement("span"); label.textContent = h;
+      labelsWrap.appendChild(label);
+    }
+  }
+
+  // =====================================================================
+  // 4) ЧАТ — WebSocket (анонимно), сообщения/мин + топ чата (сессия + всё время)
+  // =====================================================================
+  let recentTimestamps = [];
+  let ws = null;
+  let lastWsActivity = Date.now();
+
+  // Боты/служебные аккаунты и отдельные ники, которые не должны попадать в топ чата
+  // ни в каком виде — ни в счётчик сообщений, ни в "топ чатер", ни в списки лояльности.
+  const IGNORED_CHAT_NAMES = new Set([
+    "streamelements","nightbot","moobot","fossabot","wizebot",
+    "streamlabs","streamlabssystem","commanderroot","soundalerts",
+    "deepbot","stay_hydrated_bot","own3d","botisimo",
+    "getcorgi"
+  ]);
+  function isIgnoredChatter(name){
+    return IGNORED_CHAT_NAMES.has(String(name).toLowerCase());
+  }
+
+  function connectChatTracker(){
+    const anonUser = "justinfan" + Math.floor(10000 + Math.random()*89999);
+    ws = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
+    ws.onopen = () => {
+      lastWsActivity = Date.now();
+      ws.send("CAP REQ :twitch.tv/tags");
+      ws.send(`PASS SCHMOOPIIE`);
+      ws.send(`NICK ${anonUser}`);
+      ws.send(`JOIN #${CHANNEL}`);
+    };
+    ws.onmessage = (evt) => {
+      lastWsActivity = Date.now();
+      evt.data.split("\r\n").filter(Boolean).forEach(line => {
+        if(line.startsWith("PING")){ ws.send("PONG :tmi.twitch.tv"); return; }
+        if(line.includes("PRIVMSG")){
+          const userMatch = line.match(/display-name=([^;]*)/);
+          const fallbackMatch = line.match(/:(\w+)!\w+@\w+\.tmi\.twitch\.tv PRIVMSG/);
+          const name = (userMatch && userMatch[1]) ? userMatch[1] : (fallbackMatch ? fallbackMatch[1] : "неизвестный");
+          const textMatch = line.match(/PRIVMSG #\w+ :(.*)$/);
+          const msgText = textMatch ? textMatch[1].trim() : "";
+          registerMessage(name, msgText);
+        }
+      });
+    };
+    ws.onclose = () => setTimeout(connectChatTracker, 5000);
+    ws.onerror = () => { try{ ws.close(); }catch(e){} };
+  }
+
+  // Twitch шлёт PING примерно раз в 5 минут — если тишина дольше 6 минут,
+  // считаем сокет подвисшим и переподключаемся сами, не дожидаясь onclose.
+  setInterval(() => {
+    if(Date.now() - lastWsActivity > 6*60*1000){
+      try{ ws && ws.close(); }catch(e){}
+      lastWsActivity = Date.now();
+      connectChatTracker();
+    }
+  }, 60000);
+
+
+  let allTimeChatters = {}; // загрузится из Supabase в initCloudState()
+  let dirtyAllTime = false;
+
+  function registerMessage(name, msgText){
+    // Боты (StreamElements и т.п.) вообще не считаются — ни в счётчике сообщений,
+    // ни в топах, нигде.
+    if(isIgnoredChatter(name)) return;
+    if(currentStream){
+      currentStream.messagesCount++;
+      currentStream.chatters[name] = (currentStream.chatters[name]||0) + 1;
+      dirtyCurrent = true;
+    }
+    allTimeChatters[name] = (allTimeChatters[name]||0) + 1;
+    dirtyAllTime = true;
+    recentTimestamps.push(Date.now());
+    renderChatStats();
+    if(msgText) { /* зарезервировано под будущие фичи чата */ }
+  }
+
+  function renderChatStats(){
+    const now = Date.now();
+    recentTimestamps = recentTimestamps.filter(t => now-t <= 60000);
+    elMsgRate.textContent = recentTimestamps.length;
+    elMsgTotal.textContent = "всего за стрим: " + (currentStream ? currentStream.messagesCount.toLocaleString("ru-RU") : "0");
+
+    renderLeaderboardTable("top-chatters-body", currentStream ? currentStream.chatters : {}, 8, "Пока нет сообщений в чате");
+  }
+
+  // Единая отрисовка для ЛЮБОЙ таблицы "топ по сообщениям" (сессия / неделя / всё время) —
+  // одинаковые ранги, форматирование чисел и полоски прогресса везде.
+  function renderLeaderboardTable(bodyId, entriesObj, limit, emptyText){
+    const body = document.getElementById(bodyId);
+    const sorted = Object.entries(entriesObj || {}).sort((a,b)=>b[1]-a[1]).slice(0, limit || 10);
+    if(sorted.length === 0){
+      body.innerHTML = `<tr><td colspan="3" class="empty-note">${emptyText}</td></tr>`;
+      return;
+    }
+    const maxCount = sorted[0][1];
+    body.innerHTML = sorted.map(([name,count],i) => `
+      <tr>
+        <td><span class="rank">${i+1}</span></td>
+        <td>${escapeHtml(name)}</td>
+        <td>${count.toLocaleString("ru-RU")}<div class="bar-bg"><div class="bar-fill" style="width:${Math.max((count/maxCount)*100,4)}%"></div></div></td>
+      </tr>
+    `).join("");
+  }
+
+  // периодически сбрасываем изменения на диск, а не на каждое сообщение
+  setInterval(() => {
+    persistCurrentIfDirty();
+    if(dirtyAllTime){ kvSet(KEY_ALLTIME, allTimeChatters); dirtyAllTime = false; renderAllTimeChatters(); }
+    renderChatStats();
+    renderWeeklyChatters();
+  }, 5000);
+
+  // =====================================================================
+  // 5) СТАТИСТИКА ПО ВСЕМ СТРИМАМ: рекорды, дни недели, история, топ чатеров
+  // =====================================================================
+  function renderAllTimeStats(){
+    renderRecords();
+    renderDayOfWeek();
+    renderStreamLog();
+    renderAllTimeChatters();
+    renderWeeklyChatters();
+    renderTodayChatters();
+    renderGrowthChart();
+    renderCategoryDonut();
+    renderWeekCompare();
+    renderAchievements();
+    renderStreak();
+    renderForecast();
+    renderPredictWidget();
+  }
+
+  // =====================================================================
+  // 5b) РОСТ: пик/средние зрители по последним стримам
+  // =====================================================================
+  function renderGrowthChart(){
+    const svg = document.getElementById("growth-chart");
+    const peakLine = document.getElementById("growth-peak-line");
+    const avgLine = document.getElementById("growth-avg-line");
+    const grid = svg.querySelector(".chart-grid");
+    grid.innerHTML = "";
+
+    const log = streamLogData.slice(-20);
+    if(log.length < 2){
+      peakLine.setAttribute("d",""); avgLine.setAttribute("d","");
+      return;
+    }
+    const W=600, H=180, PAD=10;
+    const maxV = Math.max(...log.map(s=>s.peakViewers), 1);
+    const stepX = (W-PAD*2) / (log.length-1);
+    const toPath = (accessor) => "M " + log.map((s,i) => {
+      const x = PAD + i*stepX;
+      const y = H-PAD - (accessor(s)/maxV)*(H-PAD*2);
+      return `${x} ${y}`;
+    }).join(" L ");
+    peakLine.setAttribute("d", toPath(s=>s.peakViewers));
+    avgLine.setAttribute("d", toPath(s=>s.avgViewers));
+    animateChartLine(peakLine, "growthPeak");
+    animateChartLine(avgLine, "growthAvg");
+    for(let i=1;i<4;i++){
+      const y=(H/4)*i;
+      const line=document.createElementNS("http://www.w3.org/2000/svg","line");
+      line.setAttribute("x1",0); line.setAttribute("x2",W); line.setAttribute("y1",y); line.setAttribute("y2",y);
+      grid.appendChild(line);
+    }
+  }
+
+  // =====================================================================
+  // 5c) КАТЕГОРИИ: распределение по времени эфира (донат)
+  // =====================================================================
+  const DONUT_PALETTE = ["#9146FF","#4fe0d6","#ff6bb8","#ffc94a","#5fd97a","#b085ff","#5c8bff"];
+
+  function renderCategoryDonut(){
+    const wrap = document.getElementById("category-donut-wrap");
+    const log = streamLogData;
+    if(log.length === 0){
+      wrap.innerHTML = '<div class="empty-note">Данные появятся после первых завершённых стримов</div>';
+      return;
+    }
+    const durations = {};
+    log.forEach(s => {
+      const cat = s.category && s.category !== "—" ? s.category : "Без категории";
+      durations[cat] = (durations[cat]||0) + s.durationMin;
+    });
+    let entries = Object.entries(durations).sort((a,b)=>b[1]-a[1]);
+    if(entries.length > 6){
+      const rest = entries.slice(6).reduce((s,[,v])=>s+v, 0);
+      entries = entries.slice(0,6).concat([["Другое", rest]]);
+    }
+    const total = entries.reduce((s,[,v])=>s+v, 0) || 1;
+
+    const R = 70, CX = 90, CY = 90, STROKE = 26;
+    const circumference = 2 * Math.PI * R;
+    let offset = 0;
+    const segments = entries.map(([name, val], i) => {
+      const frac = val / total;
+      const dash = frac * circumference;
+      const seg = `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${DONUT_PALETTE[i % DONUT_PALETTE.length]}"
+        stroke-width="${STROKE}" stroke-dasharray="${dash} ${circumference-dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${CX} ${CY})"/>`;
+      offset += dash;
+      return seg;
+    }).join("");
+
+    const legend = entries.map(([name,val],i) => `
+      <div class="row">
+        <span class="dot" style="background:${DONUT_PALETTE[i % DONUT_PALETTE.length]}"></span>
+        <span class="name">${escapeHtml(name)}</span>
+        <span class="pct">${Math.round((val/total)*100)}%</span>
+      </div>`).join("");
+
+    wrap.innerHTML = `
+      <svg width="180" height="180" viewBox="0 0 180 180">${segments}</svg>
+      <div class="donut-legend">${legend}</div>
+    `;
+  }
+
+  // =====================================================================
+  // 5d) СРАВНЕНИЕ: эта неделя vs прошлая
+  // =====================================================================
+  function deltaBadge(now, prev, unit){
+    if(prev === 0 && now === 0) return '<span class="delta flat">0</span>';
+    if(prev === 0) return '<span class="delta up">новое</span>';
+    const pct = Math.round(((now - prev) / prev) * 100);
+    if(pct === 0) return '<span class="delta flat">0%</span>';
+    const cls = pct > 0 ? "up" : "down";
+    const sign = pct > 0 ? "+" : "";
+    return `<span class="delta ${cls}">${sign}${pct}%</span>`;
+  }
+
+  function renderWeekCompare(){
+    const el = document.getElementById("week-compare");
+    const now = Date.now();
+    const oneDay = 24*60*60*1000;
+    const inRange = (t, from, to) => t >= from && t < to;
+
+    const curLog = streamLogData.filter(s => inRange(s.dateStart, now-7*oneDay, now));
+    const prevLog = streamLogData.filter(s => inRange(s.dateStart, now-14*oneDay, now-7*oneDay));
+
+    const avg = arr => arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : 0;
+    const curAvgViewers = Math.round(avg(curLog.map(s=>s.avgViewers)));
+    const prevAvgViewers = Math.round(avg(prevLog.map(s=>s.avgViewers)));
+    const curHours = curLog.reduce((s,r)=>s+r.durationMin,0)/60;
+    const prevHours = prevLog.reduce((s,r)=>s+r.durationMin,0)/60;
+
+    if(curLog.length === 0 && prevLog.length === 0){
+      el.innerHTML = '<div class="empty-note">Данные появятся после первых завершённых стримов</div>';
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="compare-row">
+        <div class="clabel">Стримов</div>
+        <div class="cvals"><span class="cnow">${curLog.length}</span><span class="cprev">/ ${prevLog.length} было</span>${deltaBadge(curLog.length, prevLog.length)}</div>
+      </div>
+      <div class="compare-row">
+        <div class="clabel">Ср. зрители за стрим</div>
+        <div class="cvals"><span class="cnow">${curAvgViewers.toLocaleString("ru-RU")}</span><span class="cprev">/ ${prevAvgViewers.toLocaleString("ru-RU")} было</span>${deltaBadge(curAvgViewers, prevAvgViewers)}</div>
+      </div>
+      <div class="compare-row">
+        <div class="clabel">Часов в эфире</div>
+        <div class="cvals"><span class="cnow">${curHours.toFixed(1)}</span><span class="cprev">/ ${prevHours.toFixed(1)} было</span>${deltaBadge(curHours, prevHours)}</div>
+      </div>
+    `;
+  }
+
+  // =====================================================================
+  // 5e) ДОСТИЖЕНИЯ — вехи по ключевым метрикам
+  // =====================================================================
+  const ACHIEVEMENTS = [
+    { key:"streams", icon:"🎬", name:"Стримов отслежено", tiers:[1,10,25,50,100,250] },
+    { key:"peak", icon:"🔥", name:"Рекорд зрителей", tiers:[50,100,250,500,1000,2500] },
+    { key:"followers", icon:"⭐", name:"Подписчиков", tiers:[100,500,1000,5000,10000,25000] },
+    { key:"hours", icon:"📡", name:"Часов в эфире", tiers:[10,50,100,250,500,1000] },
+  ];
+
+  function renderAchievements(){
+    const grid = document.getElementById("achievements-grid");
+    const log = streamLogData;
+
+    const values = {
+      streams: log.length,
+      peak: Math.max(0, ...log.map(s=>s.peakViewers), currentStream ? currentStream.peakViewers : 0),
+      followers: lastKnownFollowers || 0,
+      hours: Math.round(log.reduce((s,r)=>s+r.durationMin,0)/60 + (currentStream ? (Date.now()-currentStream.startTime)/3600000 : 0)),
+    };
+
+    grid.innerHTML = ACHIEVEMENTS.map(a => {
+      const val = values[a.key];
+      const nextTierIdx = a.tiers.findIndex(t => val < t);
+      const unlocked = nextTierIdx > 0 || (nextTierIdx === -1);
+      const prevTier = nextTierIdx <= 0 ? 0 : a.tiers[nextTierIdx-1];
+      const currentTierLabel = nextTierIdx <= 0 ? "—" : a.tiers[nextTierIdx-1].toLocaleString("ru-RU");
+      if(nextTierIdx === -1){
+        return `
+          <div class="ach-card unlocked">
+            <div class="ach-top">
+              <div class="ach-icon">${a.icon}</div>
+              <div><div class="ach-name">${a.name}</div><div class="ach-tier">максимум пройден: ${prevTier ? a.tiers[a.tiers.length-1].toLocaleString("ru-RU") : ""}</div></div>
+            </div>
+            <div class="ach-progress-text">${val.toLocaleString("ru-RU")}</div>
+          </div>`;
+      }
+      const nextTier = a.tiers[nextTierIdx];
+      const progress = Math.max(4, Math.min(100, ((val - prevTier) / (nextTier - prevTier)) * 100));
+      return `
+        <div class="ach-card ${nextTierIdx > 0 ? "unlocked" : ""}">
+          <div class="ach-top">
+            <div class="ach-icon">${a.icon}</div>
+            <div><div class="ach-name">${a.name}</div><div class="ach-tier">${nextTierIdx>0 ? "уровень: "+currentTierLabel : "следующая веха"}</div></div>
+          </div>
+          <div class="ach-bar-bg"><div class="ach-bar-fill" style="width:${progress}%"></div></div>
+          <div class="ach-progress-text">${val.toLocaleString("ru-RU")} / ${nextTier.toLocaleString("ru-RU")}</div>
+        </div>`;
+    }).join("");
+  }
+
+  // =====================================================================
+  // 5f) СТРИК НЕДЕЛЬ ПОДРЯД СО СТРИМАМИ
+  // =====================================================================
+  function mondayKey(ts){
+    const d = new Date(ts);
+    d.setHours(0,0,0,0);
+    d.setDate(d.getDate() - toMonIndex(d.getDay()));
+    return d.toISOString().slice(0,10);
+  }
+  function renderStreak(){
+    const el = document.getElementById("streak-value");
+    const unitEl = document.getElementById("streak-unit");
+    if(!el) return;
+    const weeksSet = new Set(streamLogData.map(s => mondayKey(s.dateStart)));
+    if(currentStream) weeksSet.add(mondayKey(currentStream.startTime));
+    let streak = 0;
+    const cursor = new Date(); cursor.setHours(0,0,0,0); cursor.setDate(cursor.getDate() - toMonIndex(cursor.getDay()));
+    while(weeksSet.has(cursor.toISOString().slice(0,10))){
+      streak++; cursor.setDate(cursor.getDate()-7);
+    }
+    el.textContent = streak;
+    unitEl.textContent = (streak===1) ? "неделя подряд со стримами" : (streak>=2 && streak<=4 ? "недели подряд со стримами" : "недель подряд со стримами");
+  }
+
+  // =====================================================================
+  // 5g) ПРОГНОЗ СЛЕДУЮЩЕГО СТРИМА (по накопленной истории)
+  // =====================================================================
+  function renderForecast(){
+    const wrap = document.getElementById("forecast-block");
+    if(!wrap) return;
+    const log = streamLogData;
+    if(log.length < 2){
+      wrap.innerHTML = '<div class="empty-note">Данные появятся после первых завершённых стримов</div>';
+      return;
+    }
+    const sums = new Array(7).fill(0), counts = new Array(7).fill(0);
+    log.forEach(s => { sums[s.dayOfWeek] += s.peakViewers; counts[s.dayOfWeek] += 1; });
+    const avgs = sums.map((s,i) => counts[i] ? s/counts[i] : 0);
+    let bestDay = -1;
+    for(let i=0;i<7;i++) if(counts[i] > 0 && (bestDay === -1 || avgs[i] > avgs[bestDay])) bestDay = i;
+
+    const hSums = new Array(24).fill(0), hCounts = new Array(24).fill(0);
+    historyData.forEach(p => { const h = (typeof p.h === "number") ? p.h : new Date(p.t).getHours(); hSums[h]+=p.v; hCounts[h]+=1; });
+    const hAvgs = hSums.map((s,i) => hCounts[i] ? s/hCounts[i] : 0);
+    let bestHour = -1;
+    for(let i=0;i<24;i++) if(hCounts[i] > 0 && (bestHour === -1 || hAvgs[i] > hAvgs[bestHour])) bestHour = i;
+
+    let nextDateStr = "—";
+    if(bestDay !== -1){
+      const today = new Date();
+      const todayIdx = toMonIndex(today.getDay());
+      let daysAhead = (bestDay - todayIdx + 7) % 7;
+      if(daysAhead === 0) daysAhead = 7;
+      const nextDate = new Date(); nextDate.setDate(nextDate.getDate() + daysAhead);
+      nextDateStr = nextDate.toLocaleDateString("ru-RU");
+    }
+
+    wrap.innerHTML = `
+      <div class="forecast-row"><div class="ico">📅</div><div><div class="flabel">Наиболее вероятный день</div><div class="fval">${bestDay!==-1 ? DAY_LABELS[bestDay] + " (в среднем пик " + Math.round(avgs[bestDay]).toLocaleString("ru-RU") + ")" : "—"}</div></div></div>
+      <div class="forecast-row"><div class="ico">🕒</div><div><div class="flabel">Наиболее активный час</div><div class="fval">${bestHour!==-1 ? bestHour + ":00 (местное время)" : "—"}</div></div></div>
+      <div class="forecast-row"><div class="ico">➡️</div><div><div class="flabel">Ближайшая такая дата</div><div class="fval">${nextDateStr}</div></div></div>
+      <div class="hint">Оценка на основе накопленной истории стримов, не гарантия.</div>
+    `;
+  }
+
+  // =====================================================================
+  // 5h) ЗОНА ЗРИТЕЛЯ — «Угадай пик зрителей»
+  // =====================================================================
+  const PRED_KEY = "quddix_predictions_v1";
+  function loadPredictions(){ return loadJSON(PRED_KEY, { pendingStreamStart:null, pendingGuess:null, history:[] }); }
+  function savePredictions(p){ saveJSON(PRED_KEY, p); }
+
+  function renderPredictWidget(){
+    const btn = document.getElementById("predict-btn");
+    const input = document.getElementById("predict-input");
+    const result = document.getElementById("predict-result");
+    const desc = document.getElementById("predict-desc");
+    if(!btn) return;
+    const p = loadPredictions();
+    document.getElementById("predict-total").textContent = p.history.length;
+    const best = p.history.reduce((b,h) => (b===null || h.accuracy > b) ? h.accuracy : b, null);
+    document.getElementById("predict-best").textContent = best !== null ? best + "%" : "—";
+
+    if(!currentStream){
+      btn.disabled = true;
+      input.disabled = true;
+      desc.textContent = "Прогноз можно поставить только пока стрим активен — дождись начала эфира!";
+      if(p.history.length){
+        const last = p.history[p.history.length-1];
+        result.innerHTML = `Последний результат: прогноз <b>${last.guess}</b>, реальный пик <b>${last.actual}</b>, точность <b>${last.accuracy}%</b>`;
+      } else {
+        result.textContent = "";
+      }
+      return;
+    }
+    input.disabled = false;
+    desc.textContent = "Поставь прогноз, каким будет пик зрителей в этом стриме. Когда стрим закончится — узнаешь точность.";
+    if(p.pendingStreamStart === currentStream.startTime){
+      btn.disabled = true;
+      result.innerHTML = `Твой прогноз: <b>${p.pendingGuess}</b>. Текущий пик: <b>${currentStream.peakViewers}</b>. Точность узнаешь после конца стрима.`;
+    } else {
+      btn.disabled = false;
+      result.textContent = "";
+    }
+  }
+
+  function resolvePendingPrediction(record){
+    const p = loadPredictions();
+    if(p.pendingStreamStart === record.dateStart && p.pendingGuess !== null){
+      const guess = p.pendingGuess, actual = record.peakViewers;
+      const diff = Math.abs(guess - actual);
+      const accuracy = actual > 0 ? Math.max(0, Math.round(100 - (diff/actual)*100)) : (guess===0 ? 100 : 0);
+      p.history.push({ streamStart: record.dateStart, guess, actual, accuracy });
+      while(p.history.length > 50) p.history.shift();
+      p.pendingStreamStart = null; p.pendingGuess = null;
+      savePredictions(p);
+    }
+    renderPredictWidget();
+  }
+
+  const predictBtnEl = document.getElementById("predict-btn");
+  if(predictBtnEl){
+    predictBtnEl.addEventListener("click", () => {
+      const val = parseInt(document.getElementById("predict-input").value, 10);
+      if(!currentStream || isNaN(val) || val < 0) return;
+      const p = loadPredictions();
+      p.pendingStreamStart = currentStream.startTime;
+      p.pendingGuess = val;
+      savePredictions(p);
+      renderPredictWidget();
+    });
+  }
+
+  // =====================================================================
+  // 5i) ЗОНА ЗРИТЕЛЯ — квиз о канале (вопросы строятся из реальных данных)
+  // =====================================================================
+  const GENERIC_TRIVIA = [
+    { q:"Как называется валюта лояльности, которую зрители получают за просмотр эфира на Twitch?", opts:["Channel Points","Bits","Subs","Coins"], correct:0 },
+    { q:"Что означает «рейд» (raid) в контексте Twitch?", opts:["Массовый переход зрителей с одного канала на другой","Бан зрителя навсегда","Автоматическая нарезка клипа","Голосование в чате"], correct:0 },
+    { q:"Как называется платная подписка на канал, дающая эмодзи и бейджи?", opts:["Sub (подписка)","Follow","Bits","VOD"], correct:0 },
+    { q:"Что такое VOD?", opts:["Запись прошедшего стрима","Голосовой чат для зрителей","Внутриигровая валюта","Тип алерта на донат"], correct:0 },
+    { q:"Как называется собственная валюта лояльности зрителей на канале quddix?", opts:["QDX баллы","Quddix Coins","QD-очки","Стримкоины"], correct:0 }
+  ];
+  function numericQuizOptions(correct){
+    correct = Math.max(0, Math.round(correct));
+    const set = new Set([correct]);
+    let tries = 0;
+    while(set.size < 4 && tries < 30){
+      tries++;
+      const magnitude = Math.max(3, Math.round(correct*0.35));
+      const delta = (Math.floor(Math.random()*magnitude)+1) * (Math.random()<0.5?-1:1);
+      set.add(Math.max(0, correct + delta));
+    }
+    let pad = 1;
+    while(set.size < 4){ set.add(correct + pad*5); pad++; }
+    const arr = shuffleArr(Array.from(set));
+    return { opts: arr.map(v=>v.toLocaleString("ru-RU")), correct: arr.indexOf(correct) };
+  }
+  function textQuizOptions(correct, poolArr){
+    const others = shuffleArr(poolArr.filter(v => v !== correct));
+    const distractors = others.slice(0,3);
+    const arr = shuffleArr([correct, ...distractors]);
+    return { opts: arr, correct: arr.indexOf(correct) };
+  }
+  function buildQuizPool(){
+    const pool = [];
+    const log = streamLogData;
+    if(log.length >= 1){
+      const peak = log.reduce((a,b)=> b.peakViewers > a.peakViewers ? b : a);
+      const o1 = numericQuizOptions(peak.peakViewers);
+      pool.push({ q:"Какой рекорд зрителей за раз держит канал (по данным дашборда)?", opts:o1.opts, correct:o1.correct });
+
+      const o2 = numericQuizOptions(log.length);
+      pool.push({ q:"Сколько завершённых стримов отслежено на этом дашборде прямо сейчас?", opts:o2.opts, correct:o2.correct });
+
+      const catCounts = {};
+      log.forEach(s => { if(s.category && s.category !== "—") catCounts[s.category] = (catCounts[s.category]||0)+1; });
+      const catEntries = Object.entries(catCounts).sort((a,b)=>b[1]-a[1]);
+      const allCats = Object.keys(catCounts);
+      if(catEntries.length >= 1 && allCats.length >= 4){
+        const o3 = textQuizOptions(catEntries[0][0], allCats);
+        pool.push({ q:"Какая категория встречается в истории стримов чаще всего?", opts:o3.opts, correct:o3.correct });
+      }
+
+      const sums = new Array(7).fill(0), counts = new Array(7).fill(0);
+      log.forEach(s => { sums[s.dayOfWeek]+=s.peakViewers; counts[s.dayOfWeek]+=1; });
+      const avgs = sums.map((s,i)=>counts[i]?s/counts[i]:0);
+      let bestDay=-1; for(let i=0;i<7;i++) if(counts[i]>0 && (bestDay===-1||avgs[i]>avgs[bestDay])) bestDay=i;
+      if(bestDay !== -1){
+        const o4 = textQuizOptions(DAY_LABELS[bestDay], DAY_LABELS);
+        pool.push({ q:"В какой день недели канал в среднем набирает больше всего пиковых зрителей?", opts:o4.opts, correct:o4.correct });
+      }
+    }
+    const chatterEntries = Object.entries(allTimeChatters).sort((a,b)=>b[1]-a[1]);
+    if(chatterEntries.length >= 4){
+      const names = chatterEntries.slice(0,10).map(e=>e[0]);
+      const o5 = textQuizOptions(chatterEntries[0][0], names);
+      pool.push({ q:"Кто топ чатер канала за всё время (по числу сообщений)?", opts:o5.opts, correct:o5.correct });
+    }
+    if(lastKnownFollowers){
+      const o6 = numericQuizOptions(lastKnownFollowers);
+      pool.push({ q:"Сколько сейчас подписчиков на канале?", opts:o6.opts, correct:o6.correct });
+    }
+    GENERIC_TRIVIA.forEach(g => {
+      const correctText = g.opts[g.correct];
+      const shuffled = shuffleArr(g.opts.slice());
+      pool.push({ q:g.q, opts:shuffled, correct: shuffled.indexOf(correctText) });
+    });
+    return shuffleArr(pool);
+  }
+
+  function loadQuizScore(){ return loadJSON("quddix_quiz_score_v1", { correct:0, total:0 }); }
+  function saveQuizScore(s){ saveJSON("quddix_quiz_score_v1", s); }
+
+  let quizPool = [];
+  let quizIdx = 0;
+  function nextQuizQuestion(){
+    const qEl = document.getElementById("quiz-question");
+    if(!qEl) return;
+    if(quizPool.length === 0 || quizIdx >= quizPool.length){ quizPool = buildQuizPool(); quizIdx = 0; }
+    const item = quizPool[quizIdx];
+    const optsEl = document.getElementById("quiz-opts");
+    qEl.textContent = item.q;
+    optsEl.innerHTML = item.opts.map((o,i) => `<button class="quiz-opt" data-i="${i}">${escapeHtml(String(o))}</button>`).join("");
+    optsEl.querySelectorAll(".quiz-opt").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const children = Array.from(optsEl.children);
+        children.forEach(b => b.disabled = true);
+        const chosen = parseInt(btn.getAttribute("data-i"), 10);
+        const score = loadQuizScore();
+        score.total++;
+        if(chosen === item.correct){ btn.classList.add("correct"); score.correct++; }
+        else{ btn.classList.add("wrong"); children[item.correct].classList.add("correct"); }
+        saveQuizScore(score);
+        document.getElementById("quiz-score").textContent = `Счёт: ${score.correct} / ${score.total}`;
+      });
+    });
+  }
+  const quizNextEl = document.getElementById("quiz-next");
+  if(quizNextEl){
+    quizNextEl.addEventListener("click", () => { quizIdx++; nextQuizQuestion(); });
+  }
+
+  // =====================================================================
+  // 5j) ПОИСК И ФИЛЬТР ПО КАТЕГОРИЯМ В ИСТОРИИ СТРИМОВ
+  // =====================================================================
+  let logSearchTerm = "";
+  let logCategoryFilter = "all";
+  function renderLogCategoryChips(fullLog){
+    const wrap = document.getElementById("log-category-chips");
+    if(!wrap) return;
+    const cats = Array.from(new Set(fullLog.map(s=>s.category).filter(c=>c && c!=="—")));
+    if(cats.length === 0){ wrap.innerHTML = ""; return; }
+    const chips = ["all", ...cats.slice(0,6)];
+    wrap.innerHTML = chips.map(c => `<span class="filter-chip ${logCategoryFilter===c?"active":""}" data-cat="${escapeHtml(c)}">${c==="all"?"Все":escapeHtml(c)}</span>`).join("");
+    wrap.querySelectorAll(".filter-chip").forEach(chip => {
+      chip.addEventListener("click", () => { logCategoryFilter = chip.getAttribute("data-cat"); renderStreamLog(); });
+    });
+  }
+  const logSearchEl = document.getElementById("log-search");
+  if(logSearchEl){
+    logSearchEl.addEventListener("input", (e) => { logSearchTerm = e.target.value; renderStreamLog(); });
+  }
+
+  function renderRecords(){
+    const log = streamLogData;
+    streamsTag.textContent = log.length + (log.length===1 ? " стрим отслежен" : " стримов отслежено");
+
+    if(log.length === 0){
+      ["rec-peak","rec-longest","rec-msgs","rec-category","rec-topchatter","rec-totalwatch"].forEach(id=>{
+        document.getElementById(id).textContent = "—";
+      });
+      return;
+    }
+    const peak = log.reduce((a,b)=> b.peakViewers > a.peakViewers ? b : a);
+    const longest = log.reduce((a,b)=> b.durationMin > a.durationMin ? b : a);
+    const mostMsgs = log.reduce((a,b)=> b.messagesCount > a.messagesCount ? b : a);
+
+    const catCounts = {};
+    log.forEach(s => { if(s.category && s.category!=="—") catCounts[s.category] = (catCounts[s.category]||0)+1; });
+    const topCat = Object.entries(catCounts).sort((a,b)=>b[1]-a[1])[0];
+
+    const allTime = allTimeChatters;
+    const topChatterEntry = Object.entries(allTime).sort((a,b)=>b[1]-a[1])[0];
+
+    const totalMinutes = log.reduce((s,r)=> s + r.durationMin, 0) + (currentStream ? (Date.now()-currentStream.startTime)/60000 : 0);
+
+    document.getElementById("rec-peak").textContent = peak.peakViewers.toLocaleString("ru-RU") + " 👀";
+    document.getElementById("rec-longest").textContent = formatDuration(longest.durationMin);
+    document.getElementById("rec-msgs").textContent = mostMsgs.messagesCount.toLocaleString("ru-RU");
+    document.getElementById("rec-category").textContent = topCat ? topCat[0] : "—";
+    document.getElementById("rec-topchatter").textContent = topChatterEntry ? `${topChatterEntry[0]} (${topChatterEntry[1]})` : "—";
+    document.getElementById("rec-totalwatch").textContent = Math.round(totalMinutes/60).toLocaleString("ru-RU") + " ч";
+  }
+
+  function renderDayOfWeek(){
+    const log = streamLogData;
+    const barsWrap = document.getElementById("day-bars");
+    const labelsWrap = document.getElementById("day-labels");
+    barsWrap.innerHTML = ""; labelsWrap.innerHTML = "";
+
+    if(log.length === 0){
+      barsWrap.innerHTML = '<div class="empty-note" style="flex:1;">Данные появятся после первых завершённых стримов</div>';
+      return;
+    }
+    const sums = new Array(7).fill(0), counts = new Array(7).fill(0);
+    log.forEach(s => { sums[s.dayOfWeek] += s.peakViewers; counts[s.dayOfWeek] += 1; });
+    const avgs = sums.map((s,i)=> counts[i]? s/counts[i]:0);
+    const maxAvg = Math.max(...avgs,1);
+    const bestDay = avgs.indexOf(maxAvg);
+
+    for(let d=0; d<7; d++){
+      const bar = document.createElement("div");
+      bar.className = "day-bar" + (d===bestDay && avgs[d]>0 ? " best":"");
+      bar.style.height = Math.max((avgs[d]/maxAvg)*100, avgs[d]>0?4:1) + "%";
+      bar.title = counts[d] ? `${DAY_LABELS[d]} — в среднем ${Math.round(avgs[d])} пик. зрителей (${counts[d]} стрим.)` : `${DAY_LABELS[d]} — нет данных`;
+      barsWrap.appendChild(bar);
+      const label = document.createElement("span"); label.textContent = DAY_LABELS[d];
+      labelsWrap.appendChild(label);
+    }
+  }
+
+  function renderStreamLog(){
+    const fullLog = streamLogData.slice().reverse();
+    const term = logSearchTerm.trim().toLowerCase();
+    const filtered = fullLog.filter(s => {
+      const matchesCat = logCategoryFilter === "all" || s.category === logCategoryFilter;
+      const matchesTerm = !term
+        || (s.category||"").toLowerCase().includes(term)
+        || new Date(s.dateStart).toLocaleDateString("ru-RU").includes(term)
+        || (s.topChatter||"").toLowerCase().includes(term);
+      return matchesCat && matchesTerm;
+    }).slice(0, 30);
+    const body = document.getElementById("stream-log-body");
+    renderLogCategoryChips(fullLog);
+    if(filtered.length === 0){
+      body.innerHTML = `<tr><td colspan="8" class="empty-note">${fullLog.length ? "Ничего не найдено по фильтру/поиску" : "Стримы появятся здесь после первого завершённого эфира на этой странице"}</td></tr>`;
+      return;
+    }
+    body.innerHTML = filtered.map(s => `
+      <tr>
+        <td>${new Date(s.dateStart).toLocaleDateString("ru-RU")}</td>
+        <td>${DAY_LABELS[s.dayOfWeek]}</td>
+        <td>${formatDuration(s.durationMin)}</td>
+        <td>${s.peakViewers.toLocaleString("ru-RU")}</td>
+        <td>${s.avgViewers.toLocaleString("ru-RU")}</td>
+        <td>${s.messagesCount.toLocaleString("ru-RU")}</td>
+        <td>${s.topChatter !== "—" ? escapeHtml(s.topChatter) + " ("+s.topChatterCount+")" : "—"}</td>
+        <td>${escapeHtml(s.category)}</td>
+      </tr>
+    `).join("");
+  }
+
+  function renderAllTimeChatters(){
+    renderLeaderboardTable("alltime-chatters-body", allTimeChatters, 15, "Пока нет данных");
+  }
+
+  // Топ чата за последние 7 дней: суммируем разбивку по чатерам из завершённых
+  // стримов за неделю + добавляем текущий стрим, если он идёт прямо сейчас.
+  function renderWeeklyChatters(){
+    const weekAgo = Date.now() - 7*24*60*60*1000;
+    const log = streamLogData;
+    const merged = {};
+
+    log.forEach(s => {
+      if(s.dateStart >= weekAgo && s.chattersBreakdown){
+        Object.entries(s.chattersBreakdown).forEach(([name,count]) => {
+          merged[name] = (merged[name]||0) + count;
+        });
+      }
+    });
+    if(currentStream){
+      Object.entries(currentStream.chatters).forEach(([name,count]) => {
+        merged[name] = (merged[name]||0) + count;
+      });
+    }
+    renderLeaderboardTable("weekly-chatters-body", merged, 15, "Пока нет данных");
+  }
+
+  // Топ чата за сегодня (с полуночи по местному времени зрителя) — то же слияние,
+  // что и в недельной версии, только окно короче.
+  function renderTodayChatters(){
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    const log = streamLogData;
+    const merged = {};
+    log.forEach(s => {
+      if(s.dateStart >= todayStart.getTime() && s.chattersBreakdown){
+        Object.entries(s.chattersBreakdown).forEach(([name,count]) => {
+          merged[name] = (merged[name]||0) + count;
+        });
+      }
+    });
+    if(currentStream){
+      Object.entries(currentStream.chatters).forEach(([name,count]) => {
+        merged[name] = (merged[name]||0) + count;
+      });
+    }
+    renderLeaderboardTable("today-chatters-body", merged, 10, "Пока нет данных за сегодня");
+  }
+
+  // Карточка последнего завершённого стрима — быстрый рекап без похода в таблицу истории.
+  function renderLastStreamRecap(record){
+    const wrap = document.getElementById("last-stream-recap");
+    if(!wrap) return;
+    if(!record){
+      wrap.innerHTML = '<div class="empty-note">Пока нет завершённых стримов</div>';
+      return;
+    }
+    wrap.innerHTML = `
+      <div class="recap-row"><span>Дата</span><b>${new Date(record.dateStart).toLocaleDateString("ru-RU")}, ${DAY_LABELS[record.dayOfWeek]}</b></div>
+      <div class="recap-row"><span>Длительность</span><b>${formatDuration(record.durationMin)}</b></div>
+      <div class="recap-row"><span>Пик зрителей</span><b>${record.peakViewers.toLocaleString("ru-RU")}</b></div>
+      <div class="recap-row"><span>Ср. зрители</span><b>${record.avgViewers.toLocaleString("ru-RU")}</b></div>
+      <div class="recap-row"><span>Сообщений в чате</span><b>${record.messagesCount.toLocaleString("ru-RU")}</b></div>
+      <div class="recap-row"><span>Топ чатер</span><b>${record.topChatter !== "—" ? escapeHtml(record.topChatter) + " (" + record.topChatterCount + ")" : "—"}</b></div>
+      <div class="recap-row"><span>Категория</span><b>${escapeHtml(record.category)}</b></div>
+    `;
+  }
+
+  // =====================================================================
+  // 6) БЭКАП / ВОССТАНОВЛЕНИЕ ДАННЫХ
+  // =====================================================================
+  document.getElementById("btn-export").addEventListener("click", () => {
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      channel: CHANNEL,
+      history: historyData,
+      streamLog: streamLogData,
+      allTimeChatters: allTimeChatters,
+      currentStream: currentStream,
+      followersHistory: followersHistory
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `quddix-stats-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById("btn-force-end").addEventListener("click", () => {
+    if(!currentStream){ alert("Активный стрим не отслеживается — нечего завершать."); return; }
+    if(!confirm("Завершить текущий отслеживаемый стрим прямо сейчас? Накопленные данные (пик, сообщения, топ чатеров) сохранятся в историю, а «Топ чата (этот стрим)» обнулится.")) return;
+    currentlyLive = false;
+    setLiveUI(false);
+    endStream();
+  });
+
+  function renderAdminState(){
+    const el = document.getElementById("admin-current-state");
+    if(!el) return;
+    if(!currentStream){ el.textContent = "Сейчас активный стрим не отслеживается."; return; }
+    const ageMin = Math.round((Date.now() - currentStream.startTime) / 60000);
+    const sinceConfirmMin = Math.round((Date.now() - (currentStream.lastSeenLive || currentStream.startTime)) / 60000);
+    el.textContent = `Отслеживается стрим: идёт ${formatDuration(ageMin)}, последнее подтверждение "в эфире" — ${sinceConfirmMin} мин. назад. Сообщений: ${currentStream.messagesCount}.`;
+  }
+  setInterval(renderAdminState, 15000);
+  renderAdminState();
+
+  document.getElementById("btn-import").addEventListener("click", () => document.getElementById("import-file").click());
+  document.getElementById("import-file").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const data = JSON.parse(reader.result);
+        if(data.history){ historyData = data.history; kvSet(KEY_HISTORY, historyData); }
+        if(data.streamLog){ streamLogData = data.streamLog; kvSet(KEY_STREAMLOG, streamLogData); }
+        if(data.allTimeChatters){ allTimeChatters = data.allTimeChatters; kvSet(KEY_ALLTIME, allTimeChatters); }
+        if(data.currentStream){ currentStream = data.currentStream; kvSet(KEY_CURRENT, currentStream); }
+        if(data.followersHistory){ followersHistory = data.followersHistory; kvSet(KEY_FOLLOWERS, followersHistory); }
+        alert("Бэкап загружен и отправлен в облако. Страница сейчас обновится.");
+        window.location.reload();
+      }catch(err){
+        alert("Не удалось прочитать файл бэкапа — проверь, что это тот самый JSON.");
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  // =====================================================================
+  // Инициализация
+  // =====================================================================
+  // Одноразовая чистка уже накопленных данных: убирает ботов (StreamElements и т.п.)
+  // из всей истории — топ чатер по прошлым стримам пересчитывается заново без них,
+  // и очищенные данные сохраняются обратно в облако, чтобы фейк не возвращался.
+  function sanitizeIgnoredChatters(){
+    let atChanged = false;
+    Object.keys(allTimeChatters).forEach(n => {
+      if(isIgnoredChatter(n)){ delete allTimeChatters[n]; atChanged = true; }
+    });
+    let logChanged = false;
+    streamLogData.forEach(rec => {
+      if(rec.chattersBreakdown){
+        let recChanged = false;
+        Object.keys(rec.chattersBreakdown).forEach(n => {
+          if(isIgnoredChatter(n)){ delete rec.chattersBreakdown[n]; recChanged = true; }
+        });
+        if(recChanged){
+          let topName = "—", topCount = 0;
+          Object.entries(rec.chattersBreakdown).forEach(([n,c]) => { if(c > topCount){ topCount = c; topName = n; } });
+          rec.topChatter = topName;
+          rec.topChatterCount = topCount;
+          logChanged = true;
+        }
+      }
+    });
+    let curChanged = false;
+    if(currentStream && currentStream.chatters){
+      Object.keys(currentStream.chatters).forEach(n => {
+        if(isIgnoredChatter(n)){ delete currentStream.chatters[n]; curChanged = true; }
+      });
+    }
+    if(atChanged) kvSet(KEY_ALLTIME, allTimeChatters);
+    if(logChanged) kvSet(KEY_STREAMLOG, streamLogData);
+    if(curChanged) kvSet(KEY_CURRENT, currentStream);
+  }
+
+  async function initCloudState(){
+    const [h, s, a, c, f] = await Promise.all([
+      kvGet(KEY_HISTORY, []),
+      kvGet(KEY_STREAMLOG, []),
+      kvGet(KEY_ALLTIME, {}),
+      kvGet(KEY_CURRENT, null),
+      kvGet(KEY_FOLLOWERS, [])
+    ]);
+    historyData = h || [];
+    streamLogData = s || [];
+    allTimeChatters = a || {};
+    currentStream = c || null;
+    followersHistory = f || [];
+    lastKnownFollowers = followersHistory.length ? followersHistory[followersHistory.length-1].count : null;
+    sanitizeIgnoredChatters();
+
+    // Стрим мог "зависнуть" ещё до открытия этой вкладки (например, вкладка была
+    // закрыта в момент конца эфира) — проверяем это сразу при загрузке, а не только
+    // во время работы вотчдога, иначе счётчик чата стартует уже испорченным.
+    if(currentStream && isStreamStale(currentStream)){
+      console.warn("quddix dashboard: currentStream из облака устарел — завершаю его перед стартом.");
+      const record = buildStreamRecord(currentStream);
+      streamLogData.push(record);
+      while(streamLogData.length > 1000) streamLogData.shift();
+      currentStream = null;
+      kvSet(KEY_STREAMLOG, streamLogData);
+      kvSet(KEY_CURRENT, null);
+    }
+  }
+
+  await initCloudState();
+  renderViewersChart(historyData);
+  renderFollowersChart();
+  renderHourlyBreakdown();
+  renderAllTimeStats();
+  renderChatStats();
+  renderWeeklyChatters();
+  renderTodayChatters();
+  renderLastStreamRecap(streamLogData.length ? streamLogData[streamLogData.length-1] : null);
+  renderStreak();
+  renderForecast();
+  renderPredictWidget();
+  document.getElementById("quiz-score").textContent = `Счёт: ${loadQuizScore().correct} / ${loadQuizScore().total}`;
+  nextQuizQuestion();
+  renderAdminState();
+  connectChatTracker();
+  refreshCoreStats();
+  setInterval(refreshCoreStats, 20000);
+  setInterval(streamWatchdog, 60000);
+
+  // Если вкладка была свёрнута/неактивна (браузер придерживает таймеры) или пропадала сеть —
+  // подтягиваем свежие данные сразу, как только страница снова активна.
+  document.addEventListener("visibilitychange", () => {
+    if(document.visibilityState === "visible") refreshCoreStats();
+  });
+  window.addEventListener("online", refreshCoreStats);
+  window.addEventListener("focus", refreshCoreStats);
+
+  // =====================================================================
+  // Быстрая навигация по разделам: высота липкой панели подстраивается
+  // под реальную высоту шапки (она может переноситься на мобильных),
+  // плюс подсветка активного раздела по скроллу.
+  // =====================================================================
+  function syncHeaderHeight(){
+    const header = document.querySelector("header");
+    if(!header) return;
+    document.documentElement.style.setProperty("--header-h", header.offsetHeight + "px");
+  }
+  syncHeaderHeight();
+  window.addEventListener("resize", syncHeaderHeight);
+
+  const navLinks = Array.from(document.querySelectorAll(".quick-nav a[data-target]"));
+  const navSections = navLinks
+    .map(a => document.getElementById(a.getAttribute("data-target")))
+    .filter(Boolean);
+  if(navLinks.length && navSections.length && "IntersectionObserver" in window){
+    const setActive = (id) => {
+      navLinks.forEach(a => a.classList.toggle("active", a.getAttribute("data-target") === id));
+    };
+    const spy = new IntersectionObserver((entries) => {
+      const visible = entries.filter(e => e.isIntersecting).sort((a,b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if(visible.length) setActive(visible[0].target.id);
+    }, { rootMargin: "-30% 0px -60% 0px", threshold: 0 });
+    navSections.forEach(sec => spy.observe(sec));
+  }
+})();
+</script>
+
+</body>
+</html>
